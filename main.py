@@ -156,12 +156,15 @@ def get_cs_status_full():
 def send_cs_status(message):
     data = get_cs_status_full()
     
-    # Сюди вставлено ваш унікальний ID картинки
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
+    
+    # Визначаємо ID поточної гілки групи
+    thread_id = getattr(message, 'message_thread_id', None)
     
     if data.get("status") == "online":
         try:
-            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown")
+            # Додано параметр message_thread_id
+            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown", message_thread_id=thread_id)
             return
         except Exception:
             pass
