@@ -5,7 +5,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Микро-веб-сервер для прохождения проверки Render
+# Мікро-веб-сервер для проходження перевірки Render
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -17,7 +17,7 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАННЫЕ ВАШЕГО БОТА И СЕРВЕРА ---
+# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
@@ -26,7 +26,7 @@ bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
 def decode_text(byte_data):
-    """Безопасно декодирует текст с сервера"""
+    """Безпечно декодує текст з сервера"""
     try:
         return byte_data.decode('utf-8').strip()
     except Exception:
@@ -36,7 +36,7 @@ def decode_text(byte_data):
             return byte_data.decode('latin-1', errors='ignore').strip()
 
 def get_challenge_token(client, ip, port, request_header):
-    """Получает защитный challenge-токен от сервера CS 1.6"""
+    """Отримує захисний challenge-токен від сервера CS 1.6"""
     req = b'\xFF\xFF\xFF\xFF' + request_header + b'\xFF\xFF\xFF\xFF'
     client.sendto(req, (ip, port))
     try:
@@ -48,7 +48,7 @@ def get_challenge_token(client, ip, port, request_header):
     return b'\xFF\xFF\xFF\xFF'
 
 def get_cs_players(client, ip, port):
-    """Получает список игроков с количеством их убийств (фрагов)"""
+    """Отримує список гравців з кількістю їхніх вбивств (фрагів)"""
     token = get_challenge_token(client, ip, port, b'U')
     req = b'\xFF\xFF\xFF\xFFU' + token
     client.sendto(req, (ip, port))
@@ -69,7 +69,7 @@ def get_cs_players(client, ip, port):
         for _ in range(num_players):
             if len(payload) < 2:
                 break
-            payload = payload[1:]  # Пропуск индекса
+            payload = payload[1:]  # Пропуск індексу
             
             name_end = payload.find(b'\x00')
             if name_end == -1:
@@ -91,7 +91,7 @@ def get_cs_players(client, ip, port):
         return []
 
 def get_cs_status_full():
-    """Собирает статус сервера и возвращает структуру данных"""
+    """Збирає статус сервера у вигляді чистого тексту"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.settimeout(2.5)
@@ -102,24 +102,24 @@ def get_cs_status_full():
         data, _ = client.recvfrom(4096)
         payload = data[5:]
         
-        # Чтение названия сервера
+        # Читання назви сервера
         server_name_end = payload.find(b'\x00')
         server_name = decode_text(payload[:server_name_end])
         server_name = server_name.lstrip('0Оo○◦ \t')
         payload = payload[server_name_end + 1:]
         
-        # Чтение карты
+        # Читання карти
         map_end = payload.find(b'\x00')
         current_map = decode_text(payload[:map_end])
         payload = payload[map_end + 1:]
         
-        # Пропуск папки и названия игры
+        # Пропуск папки та назви гри
         for _ in range(2):
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
-            # Корректное чтение количества игроков по фиксированным смещениям протокола
-        players_count = int(payload[2]) if len(payload) >= 3 else 0
-        max_players = int(payload[3]) if len(payload) >= 4 else 0
+            # Читання кількості гравців
+        players_count = int(payload[0]) if len(payload) >= 3 else 0
+        max_players = int(payload[1]) if len(payload) >= 4 else 0
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -145,40 +145,35 @@ def get_cs_status_full():
         else:
             text += "💤 _На сервері немає гравців._\n"
             
-        return {"status": "online", "text": text, "map": current_map}
+        return {"status": "online", "text": text}
         
     except socket.timeout:
         return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} зараз недоступний або вимкнений."}
     except Exception as e:
         return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
+# Хендлер для отримання file_id картинки (потрібно зробити 1 раз)
+@bot.message_handler(content_types=['photo'])
+def catch_photo_id(message):
+    # Бот напише в консоль або чат ID картинки, яку ви йому надішлете
+    photo_id = message.photo[-1].file_id
+    bot.reply_to(message, f"Ось ID вашої картинки, скопіюйте його:\n{photo_id}")
+
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     data = get_cs_status_full()
     
-    if data.get("status") == "online":
-        map_name = data["map"]
-        photo_path_jpg = f"Images/{map_name}.jpg"
-        photo_path_png = f"Images/{map_name}.png"
-        photo_default = "Images/default.jpg"
-        
-        selected_photo = None
-        if os.path.exists(photo_path_jpg):
-            selected_photo = photo_path_jpg
-        elif os.path.exists(photo_path_png):
-            selected_photo = photo_path_png
-        elif os.path.exists(photo_default):
-            selected_photo = photo_default
-            
-        if selected_photo:
-            try:
-                with open(selected_photo, 'rb') as photo:
-                    bot.send_photo(message.chat.id, photo, caption=data["text"], parse_mode="Markdown")
-                return
-            except Exception:
-                pass
-                
-    bot.reply_to(message, data["text"], parse_mode="Markdown")
+    # Сюди ми вставимо постійний ID картинки після першого тесту
+    # Поки що ставимо перевірку: якщо ID немає, шлемо текстом
+    MAIN_BANNER_ID = " AgADAgAD1qcxG_8AAUhc_3b3_201_3_2_1_1" 
+    
+    try:
+        # Пробуємо надіслати картинку за її унікальним посиланням або ID
+        # Для початку використовуємо пряме завантаження через буфер або дефолтний ID
+        bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown")
+    except Exception:
+        # Якщо Telegram ще не знає цей ID, надсилаємо просто текст, щоб не ламати бота
+        bot.reply_to(message, data["text"], parse_mode="Markdown")
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
