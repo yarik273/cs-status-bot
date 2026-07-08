@@ -62,7 +62,7 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = int(payload[0])
+        num_players = int(payload)
         payload = payload[1:]
         players_list = []
         
@@ -79,7 +79,7 @@ def get_cs_players(client, ip, port):
             
             if len(payload) < 8:
                 break
-            frags = struct.unpack('<i', payload[:4])[0]
+            frags = struct.unpack('<i', payload[:4])
             payload = payload[8:]
             
             if name:
@@ -117,9 +117,10 @@ def get_cs_status_full():
         for _ in range(2):
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
-            # Читання кількості гравців
-        players_count = int(payload[2]) if len(payload) >= 3 else 0
-        max_players = int(payload[3]) if len(payload) >= 4 else 0
+
+        # Читання кількості гравців
+players_count = int(payload) if len(payload) >= 3 else 0
+        max_players = int(payload) if len(payload) >= 4 else 0
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -143,7 +144,7 @@ def get_cs_status_full():
         elif players_count > 0 and not players:
             text += "⏳ _Гравці підключаються до карти..._\n"
         else:
-            text += "💤 _На сервері немає гравців._\n"
+            text += "💤 _На serverі немає гравців._\n"
             
         return {"status": "online", "text": text}
         
@@ -157,14 +158,19 @@ def send_cs_status(message):
     data = get_cs_status_full()
     
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
-    
-    # Визначаємо ID поточної гілки групи
     thread_id = getattr(message, 'message_thread_id', None)
     
     if data.get("status") == "online":
         try:
-            # Додано параметр message_thread_id
-            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown", message_thread_id=thread_id)
+            # Фіксація: додано reply_to_message_id, щоб відповідь залізобетонно йшла реплаєм у ваш топік
+            bot.send_photo(
+                message.chat.id, 
+                photo=MAIN_BANNER_ID, 
+                caption=data["text"], 
+                parse_mode="Markdown", 
+                message_thread_id=thread_id, 
+                reply_to_message_id=message.message_id
+            )
             return
         except Exception:
             pass
