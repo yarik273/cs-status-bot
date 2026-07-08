@@ -1,0 +1,48 @@
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import telebot
+from valve.source.a2s import ServerQuerier
+
+# Специальный веб-сервер для прохождения проверки Render
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running successfully!")
+
+def run_web_server():
+    # Render передает порт в переменные среды, берем его или стандартный 10000
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
+    print(# Режим логирования для Render
+          f"Web server started on port {port}")
+    server.serve_forever()
+
+# --- ДАННЫЕ ВАШЕГО БОТА И СЕРВЕРА ---
+TOKEN = "8653250290:AAFWG3CdV7-0ryk1s_XgfX6ePctQ67CTZ-E"
+SERVER_IP = "91.211.118.90"
+SERVER_PORT = 27036
+
+bot = telebot.TeleBot(TOKEN)
+
+@bot.message_handler(commands=['info'])
+def send_cs_status(message):
+    try:
+        with ServerQuerier((SERVER_IP, int(SERVER_PORT))) as server:
+            info = server.info()
+            text = f"?? *Статус сервера CS 1.6*:\n\n"
+            text += f"?? Назва: {info['server_name']}\n"
+            text += f"??? Карта: {info['map_name']}\n"
+            text += f"?? Гравці: {info['player_count']}/{info['max_players']}\n"
+            bot.reply_to(message, text, parse_mode="Markdown")
+    except Exception as e:
+        bot.reply_to(message, "? Сервер зараз недоступний або вимкнений.")
+
+if name == "main":
+    # Запускаем веб-сервер, который требует Render для статуса Live
+    threading.Thread(target=run_web_server, daemon=True).start()
+    
+    # Запускаем самого бота Telegram
+    print("Telegram bot started...")
+    bot.polling(none_stop=True)
