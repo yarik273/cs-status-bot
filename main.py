@@ -3,8 +3,6 @@ import socket
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
-# Підключаємо нову сучасну бібліотеку для читання GoldSource серверів
-import openserverrequests
 
 # --- 1. ВЕБ-СЕРВЕР ДЛЯ RENDER ---
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -18,12 +16,12 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- 2. ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
+# --- 2. ДАННЫЕ ВАШЕГО БОТА И СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
-# --- 3. БАЗА КАРТИНОК ДЛЯ КАРТ ---
+# --- 3. БАЗА КАРТИНОК ДЛЯ КАРТ (ЛОКАЛЬНЫЕ ФАЙЛИ) ---
 MAP_IMAGES = {
     "cs_mansion": "images/cs_mansion.jpg",
     "cs_assault": "images/cs_assault.jpg",
@@ -47,27 +45,68 @@ OFFLINE_IMAGE = "images/offline.jpg"
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
-# --- 4. НАДІЙНА ФУНКЦІЯ ЗАПИТУ ЧЕРЕЗ OPENSERVERREQUESTS ---
-def get_cs_status_modern():
+# --- 4. МОЩНАЯ ФУНКЦИЯ ЗАПРОСА С ОБХОДОМ БЛОКИРОВОК ---
+def get_cs_status_direct():
     try:
-        # Робимо запит до CS 1.6 (GoldSource протокол)
-        server = openserverrequests.GoldSource(SERVER_IP, SERVER_PORT, timeout=4.0)
-        info = server.get_info()
-        players_data = server.get_players()
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.settimeout(4.0) # Увеличенный тайм-аут, чтобы успеть пройти защиту хостинга
         
-        server_name = info.get('hostname', 'CS 1.6 Server')
-        current_map = info.get('map', 'unknown')
-        players_count = info.get('players', 0)
-        max_players = info.get('max_players', 32)
+        # Шаг А: Получаем информацию о карте и количестве игроков (A2S_INFO)
+        request_info = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
+        client.sendto(request_info, (SERVER_IP, SERVER_PORT))
         
-        # Збираємо список нікнеймів
+        data, _ = client.recvfrom(4096)
+        if len(data) < 5 or data[:4] != b'\xFF\xFF\xFF\xFF':
+            return False, None, "❌ Отримано некоректну відповідь від сервера."
+            
+        payload = data[5:]
+        server_name_end = payload.find(b'\x00')
+        server_name = payload[:server_name_end].decode('utf-8', errors='ignore')
+        payload = payload[server_name_end + 1:]
+        
+        map_end = payload.find(b'\x00')
+        current_map = payload[:map_end].decode('utf-8', errors='ignore')
+        payload = payload[map_end + 1:]
+        
+        for _ in range(2):
+            end = payload.find(b'\x00')
+            payload = payload[end + 1:]
+            
+        payload = payload[2:]
+        players_count = payload[0] if len(payload) >= 1 else 0
+        max_players = payload[1] if len(payload) >= 2 else 0
+        
+        # Шаг Б: Получаем никнеймы игроков с авторизационным Challenge (A2S_PLAYER)
         player_names = []
-        if players_data and 'players' in players_data:
-            for p in players_data['players']:
-                name = p.get('name', '').strip()
-                if name: # Прибираємо порожні ніки
-                    player_names.append(name)
+        if players_count > 0:
+            try:
+                # Сервер требует специальный ключ авторизации перед тем как отдать ники
+                request_challenge = b'\xFF\xFF\xFF\xFF\x55\xFF\xFF\xFF\xFF'
+                client.sendto(request_challenge, (SERVER_IP, SERVER_PORT))
+                data_ch, _ = client.recvfrom(4096)
+                
+                if len(data_ch) >= 9 and data_ch[4] == 0x41: # Проверка заголовка 'A'
+                    challenge = data_ch[5:9]
+                    request_players = b'\xFF\xFF\xFF\xFF\x55' + challenge
+                    client.sendto(request_players, (SERVER_IP, SERVER_PORT))
+                    data_pl, _ = client.recvfrom(4096)
                     
+                    if len(data_pl) > 5 and data_pl[4] == 0x44: # Проверка заголовка 'D'
+                        pl_payload = data_pl[6:]
+                        while len(pl_payload) > 0:
+                         pl_payload = pl_payload[1:] # Пропускаем индекс игрока
+                            name_end = pl_payload.find(b'\x00')
+                            if name_end == -1:
+                                break
+                            name = pl_payload[:name_end].decode('utf-8', errors='ignore').strip()
+                            pl_payload = pl_payload[name_end + 1:]
+                            pl_payload = pl_payload[8:] # Пропускаем фраги и время
+                            if name:
+                                player_names.append(name)
+            except Exception:
+                pass
+
+        # Генерируем красивый текст
         text = f"🟢 *СЕРВЕР ОНЛАЙН*\n\n"
         text += f"🎮 Назва: {server_name}\n"
         text += f"🗺 Карта: {current_map}\n"
@@ -96,7 +135,7 @@ def send_cs_status(message):
     except:
         pass
     
-    is_online, current_map, status_text = get_cs_status_modern()
+    is_online, current_map, status_text = get_cs_status_direct()
     
     if is_online:
         photo_path = MAP_IMAGES.get(current_map, DEFAULT_ONLINE_IMAGE)
@@ -109,7 +148,7 @@ def send_cs_status(message):
                 bot.send_photo(message.chat.id, photo, caption=status_text, parse_mode="Markdown")
         else:
             if os.path.exists(DEFAULT_ONLINE_IMAGE):
-               with open(DEFAULT_ONLINE_IMAGE, 'rb') as photo:
+                with open(DEFAULT_ONLINE_IMAGE, 'rb') as photo:
                     bot.send_photo(message.chat.id, photo, caption=status_text, parse_mode="Markdown")
             else:
                 bot.reply_to(message, status_text, parse_mode="Markdown")
@@ -120,4 +159,4 @@ def send_cs_status(message):
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True) 
+    bot.polling(none_stop=True)   
