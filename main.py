@@ -118,22 +118,24 @@ def generate_status_message_and_keyboard():
     
     return text, markup, photo_url
     # Обробник команд
+# Обробник команд (розуміє і кнопку, і текст)
 @bot.message_handler(func=lambda msg: msg.text in ['/info', 'info', '/info@cs16_status_server_bot', 'info@cs16_status_server_bot'])
 def send_cs_status(message):
-    text, markup, photo_url = generate_status_message_and_keyboard()
     try:
-        bot.send_photo(message.chat.id, photo_url, caption=text, parse_mode="Markdown", reply_markup=markup)
-    except Exception:
+        text, markup, photo_url = generate_status_message_and_keyboard()
         bot.reply_to(message, text, parse_mode="Markdown", reply_markup=markup)
+    except Exception as e:
+        print(f"Ошибка в send_cs_status: {e}")
 
+# Обробник для кнопки "Оновити статус"
 @bot.callback_query_handler(func=lambda call: call.data == "refresh_status")
 def callback_inline(call):
-    text, markup, photo_url = generate_status_message_and_keyboard()
     try:
-        media = telebot.types.InputMediaPhoto(photo_url, caption=text, parse_mode="Markdown")
-        bot.edit_message_media(chat_id=call.message.chat.id, message_id=call.message.message_id, media=media, reply_markup=markup)
-    except Exception:
-        pass
+        text, markup, photo_url = generate_status_message_and_keyboard()
+        # Оновлюємо текст прямо на місці
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=text, parse_mode="Markdown", reply_markup=markup)
+    except Exception as e:
+        print(f"Ошибка в callback_inline: {e}")
     bot.answer_callback_query(call.id)
 
 if __name__ == "__main__":
