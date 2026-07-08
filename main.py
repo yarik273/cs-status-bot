@@ -17,7 +17,7 @@ def run_web_server():
     server.serve_forever()
 
 # --- 2. ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
-TOKEN = "8653250290:AAFWG3CdV7-Oryk1s_XgfX6ePctQ67CTZ-E"
+TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
@@ -114,7 +114,7 @@ def send_cs_status(message):
         bot.reply_to(message, status_text, parse_mode="Markdown")
 
 # --- 6. ЗАПУСК БОТА ТА ВЕБ-СЕРВЕРА ---
-if __name__ == "_-main__":
+if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
