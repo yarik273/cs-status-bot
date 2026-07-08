@@ -1,10 +1,11 @@
 import os
 import socket
+import struct
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# --- 1. ВЕБ-СЕРВЕР ДЛЯ RENDER ---
+# Мікро-веб-сервер для Render
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -16,95 +17,133 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- 2. ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
-TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
+# --- ДАННІ ВАШОГО БОТА І СЕРВЕРА ---
+TOKEN = "8653250290:AAFWG3CdV7-Oryk1s_XgfX6ePctQ67CTZ-E"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
-# --- 3. ФУНКЦІЯ ОТРИМАННЯ ДАНИХ (ОНЛАЙН + НІКНЕЙМИ) ---
-def get_cs_detailed_status():
+def get_challenge_token(client, ip, port, request_header):
+    """Отримує захисний challenge-токен від сервера CS 1.6"""
+    req = b'\xFF\xFF\xFF\xFF' + request_header + b'\xFF\xFF\xFF\xFF'
+    client.sendto(req, (ip, port))
+    try:
+        data, _ = client.recvfrom(4096)
+        if data.startswith(b'\xFF\xFF\xFF\xFFA'):  # Відповідь з токеном 'A'
+            return data[5:9]
+    except socket.timeout:
+        pass
+    return b'\xFF\xFF\xFF\xFF'
+
+def get_cs_players(client, ip, port):
+    """Отримує повний список імен гравців на сервері"""
+    token = get_challenge_token(client, ip, port, b'U')
+    req = b'\xFF\xFF\xFF\xFFU' + token
+    client.sendto(req, (ip, port))
+    
+    try:
+        data, _ = client.recvfrom(65535)
+        if not data.startswith(b'\xFF\xFF\xFF\xFFD'): # Відповідь з даними 'D'
+            return []
+        
+        payload = data[5:]
+        if len(payload) == 0:
+            return []
+            
+        num_players = payload[0]
+        payload = payload[1:]
+        players_list = []
+        
+        for _ in range(num_players):
+            if len(payload) < 2:
+                break
+            # Пропускаємо індекс гравця (1 байт)
+            payload = payload[1:]
+            
+            # Читаємо нікнейм
+            name_end = payload.find(b'\x00')
+            if name_end == -1:
+                break
+            name = payload[:name_end].decode('utf-8', errors='ignore').strip()
+            payload = payload[name_end + 1:]
+            
+            # Пропускаємо фраги (4 байти) та час у грі (4 байти флот)
+            payload = payload[8:]
+            
+            if name:  # Ігноруємо порожні ніки HLTV або тих, хто підключається
+                players_list.append(name)
+                
+        return players_list
+    except Exception:
+        return []
+
+def get_cs_status_full():
+    """Збирає повний статус сервера (Інфо + Гравці онлайн)"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        client.settimeout(3.5)
+        client.settimeout(2.5)
         
-        # Запит інформації про сервер (A2S_INFO)
-        client.sendto(b'\xFF\xFF\xFF\xFFTSource Engine Query\x00', (SERVER_IP, SERVER_PORT))
+        # 1. Запит загальної інформації (A2S_INFO)
+        info_request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
+        client.sendto(info_request, (SERVER_IP, SERVER_PORT))
+        
         data, _ = client.recvfrom(4096)
         payload = data[5:]
         
+        # Назва сервера
         server_name_end = payload.find(b'\x00')
         server_name = payload[:server_name_end].decode('utf-8', errors='ignore')
         payload = payload[server_name_end + 1:]
         
+        # Поточна карта
         map_end = payload.find(b'\x00')
         current_map = payload[:map_end].decode('utf-8', errors='ignore')
         payload = payload[map_end + 1:]
         
+        # Пропуск папки та назви гри
         for _ in range(2):
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
             
-        payload = payload[2:]
-        players_count = payload if len(payload) >= 1 else 0
-        max_players = payload if len(payload) >= 2 else 0
-        
-        # Блок отримання нікнеймів гравців (A2S_PLAYER)
-        player_names = []
-        if players_count > 0:
-            try:
-                client.sendto(b'\xFF\xFF\xFF\xFF\x55\xFF\xFF\xFF\xFF', (SERVER_IP, SERVER_PORT))
-                data_ch, _ = client.recvfrom(4096)
-                if len(data_ch) >= 9:
-                    challenge = data_ch[5:9]
-                    client.sendto(b'\xFF\xFF\xFF\xFF\x55' + challenge, (SERVER_IP, SERVER_PORT))
-                    data_pl, _ = client.recvfrom(4096)
-                    pl_payload = data_pl[6:]
-                    while len(pl_payload) > 0:
-                        pl_payload = pl_payload[1:]
-                        name_end = pl_payload.find(b'\x00')
-                        if name_end == -1: break
-                        name = pl_payload[:name_end].decode('utf-8', errors='ignore').strip()
-                        pl_payload = pl_payload[name_end + 1:]
-                        pl_payload = pl_payload[8:]
-                        if name and not name.startswith('HLTV'):
-                            player_names.append(name)
-            except:
-                pass
-
-        # Формування красивого великого тексту
-        text = f"🇺🇦 *{server_name}*\n"
-        text += f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        text += f"🟢 *СТАТУС СЕРВЕРА:* ОНЛАЙН\n\n"
-        text += f"🗺 *Поточна карта:* {current_map}\n"
-        text += f"👥 *Гравці на сервері:* *{players_count}/{max_players}*\n"
-        text += f"🔗 *Айпі для підключення:* {SERVER_IP}:{SERVER_PORT}\n"
-        text += f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        
-        if player_names:
-            text += f"👤 *СПИСОК ГРАВЦІВ В ОНЛАЙНІ ({len(player_names)}):*\n"
-            for i, name in enumerate(player_names, 1):
-                text += f" {i}.  * {name} *\n"
-        elif players_count > 0:
-            text += f"👤 *СПИСОК ГРАВЦІВ:*\n_Гравці підключаються або оновлюються..._\n"
+        # Кількість гравців
+        if len(payload) >= 4:
+            players_count = payload[2]
+            max_players = payload[3]
         else:
-            text += f"💤 *СПИСОК ГРАВЦІВ:*\n_На сервері зараз немає гравців. Заходь грати!_\n"
+            players_count, max_players = 0, 0
             
-        text += f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        text += f"📢 *Щоб оновити, тисни знову* ➡️ /info"
+        # 2. Запит списку гравців (A2S_PLAYER)
+players_names = get_cs_players(client, SERVER_IP, SERVER_PORT)
+        
+        # Формування гарного тексту відповіді
+        text = f"🟢 *Статус сервера*: ONLINE 🚀\n\n"
+        text += f"🖥️ *Назва*: {server_name}\n"
+        text += f"🗺️ *Карта*: {current_map}\n"
+        text += f"👥 *Гравці*: {players_count}/{max_players}\n\n"
+        
+        if players_count > 0 and players_names:
+            text += "👤 *Список гравців в грі:*\n"
+            for idx, p_name in enumerate(players_names, 1):
+                text += f"{idx}. {p_name}\n"
+        elif players_count > 0 and not players_names:
+            text += "⏳ _Гравці підключаються або завантажуються..._\n"
+        else:
+            text += "💤 _На сервері немає гравців._\n"
+            
         return text
-    except:
-        text = f"🔴 *СТАТУС СЕРВЕРА:* ОФЛАЙН\n\n❌ Сервер зараз недоступний або вимкнений.\nПеревірте працездатність хостингу."
-        return text
-# --- 4. ОБРОБКА КОМАНДИ /info ---
+        
+    except socket.timeout:
+        return "🔴 *Статус сервера*: OFFLINE ❌\n\nЗараз сервер недоступний або вимкнений."
+    except Exception as e:
+        return "⚠️ *Помилка*: Не вдалося отримати дані з сервера."
+
 @bot.message_handler(commands=['info'])
 def send_cs_status(message):
-    status_text = get_cs_detailed_status()
+    status_text = get_cs_status_full()
     bot.reply_to(message, status_text, parse_mode="Markdown")
 
-# --- 5. ЗАПУСК БОТА ТА ВЕБ-СЕРВЕРА ---
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
