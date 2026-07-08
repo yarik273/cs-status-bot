@@ -21,7 +21,7 @@ TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
-# --- 3. БАЗА КАРТИНОК ДЛЯ КАРТ (ЛОКАЛЬНЫЕ ФАЙЛИ) ---
+# --- 3. БАЗА КАРТИНОК ДЛЯ КАРТ (ЛОКАЛЬНЫЕ ФАЙЛЫ) ---
 MAP_IMAGES = {
     "cs_mansion": "images/cs_mansion.jpg",
     "cs_assault": "images/cs_assault.jpg",
@@ -45,21 +45,21 @@ OFFLINE_IMAGE = "images/offline.jpg"
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
-# --- 4. МОЩНАЯ ФУНКЦИЯ ЗАПРОСА С ОБХОДОМ БЛОКИРОВОК ---
+# --- 4. СТАБИЛЬНАЯ ФУНКЦІЯ ЗАПРОСА К СЕРВЕРУ CS 1.6 ---
 def get_cs_status_direct():
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        client.settimeout(4.0) # Увеличенный тайм-аут, чтобы успеть пройти защиту хостинга
+        client.settimeout(4.0)
         
-        # Шаг А: Получаем информацию о карте и количестве игроков (A2S_INFO)
-        request_info = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
-        client.sendto(request_info, (SERVER_IP, SERVER_PORT))
+        request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
+        client.sendto(request, (SERVER_IP, SERVER_PORT))
         
         data, _ = client.recvfrom(4096)
         if len(data) < 5 or data[:4] != b'\xFF\xFF\xFF\xFF':
             return False, None, "❌ Отримано некоректну відповідь від сервера."
             
         payload = data[5:]
+        
         server_name_end = payload.find(b'\x00')
         server_name = payload[:server_name_end].decode('utf-8', errors='ignore')
         payload = payload[server_name_end + 1:]
@@ -73,56 +73,18 @@ def get_cs_status_direct():
             payload = payload[end + 1:]
             
         payload = payload[2:]
-        players_count = payload[0] if len(payload) >= 1 else 0
-        max_players = payload[1] if len(payload) >= 2 else 0
+            
+        if len(payload) >= 2:
+            players = payload[0]
+            max_players = payload[1]
+        else:
+            players, max_players = 0, 0
         
-        # Шаг Б: Получаем никнеймы игроков с авторизационным Challenge (A2S_PLAYER)
-        player_names = []
-        if players_count > 0:
-            try:
-                # Сервер требует специальный ключ авторизации перед тем как отдать ники
-                request_challenge = b'\xFF\xFF\xFF\xFF\x55\xFF\xFF\xFF\xFF'
-                client.sendto(request_challenge, (SERVER_IP, SERVER_PORT))
-                data_ch, _ = client.recvfrom(4096)
-                
-                if len(data_ch) >= 9 and data_ch[4] == 0x41: # Проверка заголовка 'A'
-                    challenge = data_ch[5:9]
-                    request_players = b'\xFF\xFF\xFF\xFF\x55' + challenge
-                    client.sendto(request_players, (SERVER_IP, SERVER_PORT))
-                    data_pl, _ = client.recvfrom(4096)
-                    
-                    if len(data_pl) > 5 and data_pl[4] == 0x44: # Проверка заголовка 'D'
-                        pl_payload = data_pl[6:]
-                        while len(pl_payload) > 0:
-                         pl_payload = pl_payload[1:] # Пропускаем индекс игрока
-                            name_end = pl_payload.find(b'\x00')
-                            if name_end == -1:
-                                break
-                            name = pl_payload[:name_end].decode('utf-8', errors='ignore').strip()
-                            pl_payload = pl_payload[name_end + 1:]
-                            pl_payload = pl_payload[8:] # Пропускаем фраги и время
-                            if name:
-                                player_names.append(name)
-            except Exception:
-                pass
-
-        # Генерируем красивый текст
         text = f"🟢 *СЕРВЕР ОНЛАЙН*\n\n"
         text += f"🎮 Назва: {server_name}\n"
         text += f"🗺 Карта: {current_map}\n"
-        text += f"👥 Гравці: *{players_count}/{max_players}*\n\n"
-        
-        if player_names:
-            text += "👤 *Список гравців в онлайні:*\n"
-            for i, name in enumerate(player_names, 1):
-                text += f"{i}. {name}\n"
-        elif players_count > 0:
-            text += "⏳ _Оновлюю список гравців..._\n"
-        else:
-            text += "💤 _На сервері зараз немає гравців._\n"
-            
+        text += f"👥 Гравці: *{players}/{max_players}*\n"
         return True, current_map, text
-        
     except Exception as e:
         text = "🔴 *СЕРВЕР ОФЛАЙН*\n\n❌ Сервер зараз недоступний або вимкнений."
         return False, None, text
@@ -149,7 +111,7 @@ def send_cs_status(message):
         else:
             if os.path.exists(DEFAULT_ONLINE_IMAGE):
                 with open(DEFAULT_ONLINE_IMAGE, 'rb') as photo:
-                    bot.send_photo(message.chat.id, photo, caption=status_text, parse_mode="Markdown")
+                  bot.send_photo(message.chat.id, photo, caption=status_text, parse_mode="Markdown")
             else:
                 bot.reply_to(message, status_text, parse_mode="Markdown")
     except Exception as e:
@@ -159,4 +121,4 @@ def send_cs_status(message):
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True)   
+    bot.polling(none_stop=True)  
