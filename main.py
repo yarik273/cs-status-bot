@@ -17,11 +17,10 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
+# --- ДАНІ ВАШЕГО БОТА І СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
-MAIN_BANNER_URL = "https://ibb.co"
 
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
@@ -63,7 +62,7 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = int(payload)
+        num_players = int(payload[0])
         payload = payload[1:]
         players_list = []
         
@@ -80,7 +79,7 @@ def get_cs_players(client, ip, port):
             
             if len(payload) < 8:
                 break
-            frags = struct.unpack('<i', payload[:4])
+            frags = struct.unpack('<i', payload[:4])[0]
             payload = payload[8:]
             
             if name:
@@ -95,8 +94,7 @@ def get_cs_status_full():
     """Збирає статус сервера у вигляді чистого тексту"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # Трохи збільшили час очікування, щоб застрахувати від мікро-зависань хостингу
-        client.settimeout(4.0)
+        client.settimeout(2.5)
         
         info_request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
         client.sendto(info_request, (SERVER_IP, SERVER_PORT))
@@ -115,13 +113,13 @@ def get_cs_status_full():
         current_map = decode_text(payload[:map_end])
         payload = payload[map_end + 1:]
         
+        # Пропуск папки та назви гри
         for _ in range(2):
-        end = payload.find(b'\x00')
+            end = payload.find(b'\x00')
             payload = payload[end + 1:]
-            
-        # Читання кількості гравців
-        players_count = int(payload) if len(payload) >= 3 else 0
-        max_players = int(payload) if len(payload) >= 4 else 0
+            # Читання кількості гравців
+        players_count = int(payload[2]) if len(payload) >= 3 else 0
+        max_players = int(payload[3]) if len(payload) >= 4 else 0
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -131,7 +129,7 @@ def get_cs_status_full():
         text += f"🗺️ *Карта*: {current_map}\n"
         text += f"👥 *Гравці*: {players_count}/{max_players}\n\n"
         
-        if len(players) > 0:
+        if players_count > 0 and players:
             for idx, p in enumerate(players, 1):
                 if idx == 1:
                     emoji = "🥇"
@@ -142,6 +140,8 @@ def get_cs_status_full():
                 else:
                     emoji = "🎮"
                 text += f"{emoji} {p['name']} — {p['frags']} вбивств\n"
+        elif players_count > 0 and not players:
+            text += "⏳ _Гравці підключаються до карти..._\n"
         else:
             text += "💤 _На сервері немає гравців._\n"
             
@@ -156,14 +156,12 @@ def get_cs_status_full():
 def send_cs_status(message):
     data = get_cs_status_full()
     
-    # Виправляємо надсилання в тему General (якщо ID теми дорівнює 1, скидаємо його)
-    thread_id = getattr(message, 'message_thread_id', None)
-    if thread_id == 1:
-        thread_id = None
-        
+    # Сюди вставлено ваш унікальний ID картинки
+    MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
+    
     if data.get("status") == "online":
         try:
-            bot.send_photo(message.chat.id, photo=MAIN_BANNER_URL, caption=data["text"], parse_mode="Markdown", message_thread_id=thread_id)
+            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown")
             return
         except Exception:
             pass
@@ -173,4 +171,4 @@ def send_cs_status(message):
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True)    
+    bot.polling(none_stop=True)
