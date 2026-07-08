@@ -1,4 +1,7 @@
-btn_connect = telebot.types.InlineKeyboardButton(text="🎮 Підключитися", url=connect_url)
+    markup = telebot.types.InlineKeyboardMarkup()
+    connect_url = f"steam://connect/{SERVER_IP}:{SERVER_PORT}"
+    
+    btn_connect = telebot.types.InlineKeyboardButton(text="🎮 Підключитися", url=connect_url)
     btn_refresh = telebot.types.InlineKeyboardButton(text="🔄 Оновити статус", callback_data="refresh_status")
     
     markup.add(btn_connect)
