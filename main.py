@@ -72,7 +72,7 @@ def send_cs_status(message):
     status_text = get_cs_status_direct()
     bot.reply_to(message, status_text, parse_mode="Markdown")
 
-if name == "main":
+if_name_ == "_main_":
     # Запуск веб-сервера для Render в отдельном потоке
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
