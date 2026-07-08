@@ -62,7 +62,7 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = payload
+        num_players = payload[0]
         payload = payload[1:]
         players_list = []
         
@@ -79,7 +79,7 @@ def get_cs_players(client, ip, port):
             
             if len(payload) < 8:
                 break
-            frags = struct.unpack('<i', payload[:4])
+            frags = struct.unpack('<i', payload[:4])[0]
             payload = payload[8:]
             
             if name:
@@ -104,7 +104,7 @@ def get_cs_status_full():
         
         server_name_end = payload.find(b'\x00')
         server_name = decode_text(payload[:server_name_end])
-        server_name = server_name.lstrip('0Оo○◦ \t') # Очистка от нуля на начале
+        server_name = server_name.lstrip('0Оo○◦ \t') # Очистка названия от нуля
         
         payload = payload[server_name_end + 1:]
         
@@ -117,8 +117,8 @@ def get_cs_status_full():
             payload = payload[end + 1:]
             
         if len(payload) >= 4:
-           players_count = payload
-            max_players = payload
+          players_count = payload[0]
+            max_players = payload[1]
         else:
             players_count, max_players = 0, 0
             
@@ -157,14 +157,11 @@ def get_cs_status_full():
 def send_cs_status(message):
     data = get_cs_status_full()
     
-    # Если сервер онлайн, пробуем отправить фото карты
     if data.get("status") == "online":
         map_name = data["map"]
-        # Собираем путь к картинке. Если папка называется Images, ставим 'Images/имя_карты.jpg'
-        # Поддерживаем два расширения на всякий случай (jpg и png)
         photo_path_jpg = f"Images/{map_name}.jpg"
         photo_path_png = f"Images/{map_name}.png"
-        photo_default = "Images/default.jpg" # Картинка-заглушка
+        photo_default = "Images/default.jpg"
         
         selected_photo = None
         if os.path.exists(photo_path_jpg):
@@ -174,19 +171,17 @@ def send_cs_status(message):
         elif os.path.exists(photo_default):
             selected_photo = photo_default
             
-        # Если картинка найдена на сервере — отправляем как фото с описанием
         if selected_photo:
             try:
                 with open(selected_photo, 'rb') as photo:
                     bot.send_photo(message.chat.id, photo, caption=data["text"], parse_mode="Markdown")
                 return
             except Exception:
-                pass # Если не удалось прочесть файл, отправим просто текст ниже
+                pass
                 
-    # Если сервер оффлайн или картинка не найдена — отправляем обычное текстовое сообщение
     bot.reply_to(message, data["text"], parse_mode="Markdown")
 
-if __name__ == "__main__":
+if name == "main":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True) 
+    bot.polling(none_stop=True)  
