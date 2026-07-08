@@ -5,7 +5,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Мікро-веб-сервер для проходження перевірки Render
+# Мікро-веб-сервер для Render
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -24,18 +24,6 @@ SERVER_PORT = 27036
 
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
-
-# Словник з картинками карт
-MAP_IMAGES = {
-    "de_dust2": "https://githubusercontent.com",
-    "de_dust2_2x2": "https://githubusercontent.com",
-    "dedust2x2": "https://githubusercontent.com",
-    "de_inferno": "https://githubusercontent.com",
-    "de_nuke": "https://githubusercontent.com",
-    "de_train": "https://githubusercontent.com",
-    "cs_italy": "https://githubusercontent.com",
-    "default": "https://githubusercontent.com"
-}
 
 # Отримання статусу сервера CS 1.6
 def get_cs_status_direct():
@@ -77,7 +65,7 @@ def get_cs_status_direct():
     except Exception:
         return {"success": False}
 
-# Генерація повідомлення та красивих кнопок
+# Генерація тільки ТЕКСТУ та кнопок (без картинок)
 def generate_status_message_and_keyboard():
     data = get_cs_status_direct()
     
@@ -85,7 +73,7 @@ def generate_status_message_and_keyboard():
         text = "❌ *Сервер зараз недоступний або вимкнений.*"
         markup = telebot.types.InlineKeyboardMarkup()
         markup.add(telebot.types.InlineKeyboardButton(text="🔄 Оновити", callback_data="refresh_status"))
-        return text, markup, MAP_IMAGES["default"]
+        return text, markup
         
     p = data["players"]
     m = data["max_players"]
@@ -93,6 +81,7 @@ def generate_status_message_and_keyboard():
     filled = int((p / m) * 10) if m > 0 else 0
     bar = "🟩" * filled + "⬜" * (10 - filled)
     
+    # Гарний текст
     text = f"💣 *{data['name']}*\n❤️\n\n"
     text += f"🗺️ *Карта:* {data['map']}\n"
     text += f"👥 *Гравці:* {p}/{m}  {bar} *{percent}%*\n"
@@ -113,32 +102,27 @@ def generate_status_message_and_keyboard():
     markup.add(btn_connect)
     markup.add(btn_refresh)
     
-    map_clean = data["map"].lower().strip()
-    photo_url = MAP_IMAGES.get(map_clean, MAP_IMAGES["default"])
-    
-    return text, markup, photo_url
-    # Обробник команд
-# Обробник команд (розуміє і кнопку, і текст)
+    return text, markup
+
+# Обробник команд (реагує на кнопку інфо і текст)
 @bot.message_handler(func=lambda msg: msg.text in ['/info', 'info', '/info@cs16_status_server_bot', 'info@cs16_status_server_bot'])
 def send_cs_status(message):
     try:
-        text, markup, photo_url = generate_status_message_and_keyboard()
+        text, markup = generate_status_message_and_keyboard()
         bot.reply_to(message, text, parse_mode="Markdown", reply_markup=markup)
     except Exception as e:
-        print(f"Ошибка в send_cs_status: {e}")
-
-# Обробник для кнопки "Оновити статус"
+        print(f"Помилка: {e}")
+     # Обробник для кнопки оновлення
 @bot.callback_query_handler(func=lambda call: call.data == "refresh_status")
 def callback_inline(call):
     try:
-        text, markup, photo_url = generate_status_message_and_keyboard()
-        # Оновлюємо текст прямо на місці
+        text, markup = generate_status_message_and_keyboard()
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=text, parse_mode="Markdown", reply_markup=markup)
     except Exception as e:
-        print(f"Ошибка в callback_inline: {e}")
+        print(f"Помилка: {e}")
     bot.answer_callback_query(call.id)
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True)
+    bot.polling(none_stop=True)   
