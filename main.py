@@ -27,16 +27,14 @@ bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
 def decode_text(byte_data):
-    """Безпечно декодує текст з сервера та очищає від системного сміття"""
+    """Безпечно декодує текст з сервера"""
     try:
-        text = byte_data.decode('utf-8').strip()
+        return byte_data.decode('utf-8').strip()
     except Exception:
         try:
-            text = byte_data.decode('cp1251', errors='ignore').strip()
+            return byte_data.decode('cp1251', errors='ignore').strip()
         except Exception:
-            text = byte_data.decode('latin-1', errors='ignore').strip()
-    
-    return "".join(ch for ch in text if ch.isprintable())
+            return byte_data.decode('latin-1', errors='ignore').strip()
 
 def get_challenge_token(client, ip, port, request_header):
     """Отримує захисний challenge-токен від сервера CS 1.6"""
@@ -72,7 +70,7 @@ def get_cs_players(client, ip, port):
         for _ in range(num_players):
             if len(payload) < 2:
                 break
-            payload = payload[1:]
+            payload = payload[1:]  # Пропуск індексу
             
             name_end = payload.find(b'\x00')
             if name_end == -1:
@@ -97,6 +95,7 @@ def get_cs_status_full():
     """Збирає статус сервера у вигляді чистого тексту"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Трохи збільшили час очікування, щоб застрахувати від мікро-зависань хостингу
         client.settimeout(4.0)
         
         info_request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
@@ -105,19 +104,23 @@ def get_cs_status_full():
         data, _ = client.recvfrom(4096)
         payload = data[5:]
         
+        # Читання назви сервера
         server_name_end = payload.find(b'\x00')
         server_name = decode_text(payload[:server_name_end])
         server_name = server_name.lstrip('0Оo○◦ \t')
         payload = payload[server_name_end + 1:]
         
+        # Читання карти
         map_end = payload.find(b'\x00')
         current_map = decode_text(payload[:map_end])
         payload = payload[map_end + 1:]
         
         for _ in range(2):
-            end = payload.find(b'\x00')
+        end = payload.find(b'\x00')
             payload = payload[end + 1:]
-            players_count = int(payload) if len(payload) >= 3 else 0
+            
+        # Читання кількості гравців
+        players_count = int(payload) if len(payload) >= 3 else 0
         max_players = int(payload) if len(payload) >= 4 else 0
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
@@ -153,7 +156,7 @@ def get_cs_status_full():
 def send_cs_status(message):
     data = get_cs_status_full()
     
-    # Розумне визначення теми: якщо топік відсутній або дорівнює 1 (дефолт для General), не шлемо зайвих ID
+    # Виправляємо надсилання в тему General (якщо ID теми дорівнює 1, скидаємо його)
     thread_id = getattr(message, 'message_thread_id', None)
     if thread_id == 1:
         thread_id = None
@@ -170,4 +173,4 @@ def send_cs_status(message):
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True)
+    bot.polling(none_stop=True)    
