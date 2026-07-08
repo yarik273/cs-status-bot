@@ -104,7 +104,7 @@ def get_cs_status_full():
         
         server_name_end = payload.find(b'\x00')
         server_name = decode_text(payload[:server_name_end])
-        server_name = server_name.lstrip('0Оo○◦ \t') # Очистка названия от нуля
+        server_name = server_name.lstrip('0Оo○◦ \t')
         
         payload = payload[server_name_end + 1:]
         
@@ -116,11 +116,8 @@ def get_cs_status_full():
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
             
-        if len(payload) >= 4:
-          players_count = payload[0]
-            max_players = payload[1]
-        else:
-            players_count, max_players = 0, 0
+        # Блок извлечения игроков переписан в строгую линию для защиты от IndentationError
+players_count, max_players = (payload[2], payload[3]) if len(payload) >= 4 else (0, 0)
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -184,4 +181,5 @@ def send_cs_status(message):
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True)  
+    bot.polling(none_stop=True)
+
