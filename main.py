@@ -146,7 +146,7 @@ def send_cs_status(message):
     status_text = get_cs_status_full()
     bot.reply_to(message, status_text, parse_mode="Markdown")
 
-if name == "main":
+if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
