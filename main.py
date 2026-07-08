@@ -4,6 +4,7 @@ import struct
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Мікро-веб-сервер для проходження перевірки Render
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -17,10 +18,11 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШЕГО БОТА І СЕРВЕРА ---
+# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
+MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
 
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
@@ -48,7 +50,7 @@ def get_challenge_token(client, ip, port, request_header):
     return b'\xFF\xFF\xFF\xFF'
 
 def get_cs_players(client, ip, port):
-    """Отримує список гравців з кількістю їхніх вбивств (фрагів)"""
+    """Отримує список гравців з фільтрацією рекламних ботів та посилань"""
     token = get_challenge_token(client, ip, port, b'U')
     req = b'\xFF\xFF\xFF\xFFU' + token
     client.sendto(req, (ip, port))
@@ -62,7 +64,7 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = int(payload[0])
+        num_players = int(payload)
         payload = payload[1:]
         players_list = []
         
@@ -79,10 +81,15 @@ def get_cs_players(client, ip, port):
             
             if len(payload) < 8:
                 break
-            frags = struct.unpack('<i', payload[:4])[0]
+            frags = struct.unpack('<i', payload[:4])
             payload = payload[8:]
             
             if name:
+                # НАДІЙНИЙ ФІЛЬТР: якщо в нікнеймі є ознаки посилань — повністю ігноруємо його
+                lower_name = name.lower()
+                if "http" in lower_name or "t.me" in lower_name or "vk.com" in lower_name or "com" in lower_name or "ua" in lower_name:
+                    continue
+                    
                 players_list.append({"name": name, "frags": frags})
                 
         players_list.sort(key=lambda x: x["frags"], reverse=True)
@@ -102,24 +109,21 @@ def get_cs_status_full():
         data, _ = client.recvfrom(4096)
         payload = data[5:]
         
-        # Читання назви сервера
         server_name_end = payload.find(b'\x00')
         server_name = decode_text(payload[:server_name_end])
         server_name = server_name.lstrip('0Оo○◦ \t')
         payload = payload[server_name_end + 1:]
         
-        # Читання карти
         map_end = payload.find(b'\x00')
         current_map = decode_text(payload[:map_end])
         payload = payload[map_end + 1:]
         
-        # Пропуск папки та назви гри
         for _ in range(2):
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
-            # Читання кількості гравців
-        players_count = int(payload[2]) if len(payload) >= 3 else 0
-        max_players = int(payload[3]) if len(payload) >= 4 else 0
+            
+        players_count = int(payload) if len(payload) >= 3 else 0
+        max_players = int(payload) if len(payload) >= 4 else 0
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -129,7 +133,10 @@ def get_cs_status_full():
         text += f"🗺️ *Карта*: {current_map}\n"
         text += f"👥 *Гравці*: {players_count}/{max_players}\n\n"
         
-        if players_count > 0 and players:
+        # Рахуємо реальних гравців, які пройшли через фільтр
+        real_players_count = len(players)
+        
+        if real_players_count > 0:
             for idx, p in enumerate(players, 1):
                 if idx == 1:
                     emoji = "🥇"
@@ -140,8 +147,8 @@ def get_cs_status_full():
                 else:
                     emoji = "🎮"
                 text += f"{emoji} {p['name']} — {p['frags']} вбивств\n"
-        elif players_count > 0 and not players:
-            text += "⏳ _Гравці підключаються до карти..._\n"
+        elif players_count > 0 and real_players_count == 0:
+            text += "⏳ _На сервері лише рекламні боти або HLTV..._\n"
         else:
             text += "💤 _На сервері немає гравців._\n"
             
@@ -152,21 +159,43 @@ def get_cs_status_full():
     except Exception as e:
         return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
+def generate_markup():
+    """Створює зручні інлайн-кнопки під моніторингом"""
+    markup = InlineKeyboardMarkup()
+    btn_refresh = InlineKeyboardButton("🔄 Оновити статус", callback_data="refresh_status")
+    btn_connect = InlineKeyboardButton("🚀 Зайти в гру", url=f"steam://connect/{SERVER_IP}:{SERVER_PORT}")
+    markup.row(btn_refresh)
+    markup.row(btn_connect)
+    return markup
+
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     data = get_cs_status_full()
-    
-    # Сюди вставлено ваш унікальний ID картинки
-    MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
-    
     if data.get("status") == "online":
         try:
-            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown")
+            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown", reply_markup=generate_markup())
             return
         except Exception:
             pass
-            
-    bot.reply_to(message, data["text"], parse_mode="Markdown")
+    bot.reply_to(message, data["text"], parse_mode="Markdown", reply_markup=generate_markup())
+
+# Обробник натискання на кнопку "Оновити статус"
+@bot.callback_query_handler(func=lambda call: call.data == "refresh_status")
+def refresh_callback(call):
+    data = get_cs_status_full()
+    try:
+        # Редагуємо опис під існуючим банером, щоб не плодити нові повідомлення
+        bot.edit_message_caption(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            caption=data["text"],
+            parse_mode="Markdown",
+            reply_markup=generate_markup()
+        )
+        # Надсилаємо миттєве сповіщення зверху екрана Telegram
+        bot.answer_callback_query(call.id, "📊 Статистику успішно оновлено!")
+    except Exception:
+        bot.answer_callback_query(call.id, "🔄 Дані вже актуальні.")
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
