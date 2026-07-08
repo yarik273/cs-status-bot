@@ -62,7 +62,7 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = int(payload[0])
+        num_players = int(payload[0])  # ПОВЕРНЕНО [0]
         payload = payload[1:]
         players_list = []
         
@@ -79,7 +79,7 @@ def get_cs_players(client, ip, port):
             
             if len(payload) < 8:
                 break
-            frags = struct.unpack('<i', payload[:4])[0]
+            frags = struct.unpack('<i', payload[:4])[0]  # ПОВЕРНЕНО [0]
             payload = payload[8:]
             
             if name:
@@ -118,8 +118,8 @@ def get_cs_status_full():
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
             # Читання кількості гравців
-        players_count = int(payload[2]) if len(payload) >= 3 else 0
-        max_players = int(payload[3]) if len(payload) >= 4 else 0
+        players_count = int(payload[2]) if len(payload) >= 3 else 0  # ПОВЕРНЕНО [2]
+        max_players = int(payload[3]) if len(payload) >= 4 else 0   # ПОВЕРНЕНО [3]
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -152,14 +152,13 @@ def get_cs_status_full():
     except Exception as e:
         return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
-# --- ОСЬ ТУТ ЄДИНА ЗМІНА (ДОДАНО ВРАХУВАННЯ ГІЛКИ/ТОПІКА) ---
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     data = get_cs_status_full()
     
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
     
-    # Дізнаємось ID гілки, де написали команду
+    # Визначаємо ID гілки (топіка), де викликали команду
     thread_id = message.message_thread_id
     
     if data.get("status") == "online":
