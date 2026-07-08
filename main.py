@@ -18,7 +18,8 @@ def run_web_server():
     server.serve_forever()
 
 # --- ДАННЫЕ ВАШЕГО БОТА И СЕРВЕРА ---
-TOKEN = "8653250290:AAFWG3CdV7-Oryk1s_XgfX6ePctQ67CTZ-E"
+# Используем ваш новый рабочий токен напрямую
+TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
@@ -31,21 +32,21 @@ def get_challenge_token(client, ip, port, request_header):
     client.sendto(req, (ip, port))
     try:
         data, _ = client.recvfrom(4096)
-        if data.startswith(b'\xFF\xFF\xFF\xFFA'):  # Ответ с токеном 'A'
+        if data.startswith(b'\xFF\xFF\xFF\xFFA'):  # Ответ 'A'
             return data[5:9]
     except socket.timeout:
         pass
     return b'\xFF\xFF\xFF\xFF'
 
 def get_cs_players(client, ip, port):
-    """Получает полный список имен игроков на сервере"""
+    """Получает список игроков с количеством их убийств (фрагов)"""
     token = get_challenge_token(client, ip, port, b'U')
     req = b'\xFF\xFF\xFF\xFFU' + token
     client.sendto(req, (ip, port))
     
     try:
         data, _ = client.recvfrom(65535)
-        if not data.startswith(b'\xFF\xFF\xFF\xFFD'): # Ответ с данными 'D'
+        if not data.startswith(b'\xFF\xFF\xFF\xFFD'): # Ответ 'D'
             return []
         
         payload = data[5:]
@@ -62,25 +63,32 @@ def get_cs_players(client, ip, port):
             # Пропускаем индекс игрока (1 байт)
             payload = payload[1:]
             
-            # Читаем никнейм
+            # Читаем никнейм (до нулевого байта)
             name_end = payload.find(b'\x00')
             if name_end == -1:
                 break
             name = payload[:name_end].decode('utf-8', errors='ignore').strip()
             payload = payload[name_end + 1:]
             
-            # Пропускаем фраги (4 байта) и время в игре (4 байта)
+            # Читаем фраги (4 байта, формат 'i' - integer)
+            if len(payload) < 8:
+                break
+            frags = struct.unpack('<i', payload[:4])[0]
+            
+            # Пропускаем время в игре (4 байта float)
             payload = payload[8:]
             
-            if name:  # Игнорируем пустые ники HLTV или подключающихся
-                players_list.append(name)
+            if name:  # Игнорируем пустые строки HLTV
+                players_list.append({"name": name, "frags": frags})
                 
+        # Сортируем игроков по убыванию фрагов (как на скриншоте)
+        players_list.sort(key=lambda x: x["frags"], reverse=True)
         return players_list
     except Exception:
         return []
 
 def get_cs_status_full():
-    """Собирает полный статус сервера (Инфо + Игроки онлайн)"""
+    """Собирает статус сервера в красивом стиле ЧЕРНОБЫЛЬ-УКРАИНА"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.settimeout(2.5)
@@ -104,7 +112,7 @@ def get_cs_status_full():
         
         # Пропуск папки и названия игры
         for _ in range(2):
-            end = payload.find(b'\x00')
+         end = payload.find(b'\x00')
             payload = payload[end + 1:]
             
         # Количество игроков
@@ -114,37 +122,47 @@ def get_cs_status_full():
         else:
             players_count, max_players = 0, 0
             
-        # 2. Запрос списка игроков (A2S_PLAYER)
-        players_names = get_cs_players(client, SERVER_IP, SERVER_PORT)
+        # 2. Запрос списка игроков и их фрагов
+        players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
-# Формирование красивого текста ответа
-        text = f"🟢 *Статус сервера*: ONLINE 🚀\n\n"
-        text += f"🖥️ *Название*: {server_name}\n"
+        # Формирование визуального стиля под скриншот шаблона
+        text = f"⚙️ *Моніторинг {server_name}*\n\n"
+        text += f"🖥️ *{server_name}*\n"
+        text += f"🌐 *IP*: {SERVER_IP}:{SERVER_PORT}\n"
         text += f"🗺️ *Карта*: {current_map}\n"
-        text += f"👥 *Игроки*: {players_count}/{max_players}\n\n"
+        text += f"👥 *Гравці*: {players_count}/{max_players}\n\n"
         
-        if players_count > 0 and players_names:
-            text += "👤 *Список игроков в игре:*\n"
-            for idx, p_name in enumerate(players_names, 1):
-                text += f"{idx}. {p_name}\n"
-        elif players_count > 0 and not players_names:
-            text += "⏳ _Игроки подключаются или загружаются..._\n"
+        if players_count > 0 and players:
+            for idx, p in enumerate(players, 1):
+                # Назначаем особые эмодзи для топ-3 игроков
+                if idx == 1:
+                    emoji = "🥇"
+                elif idx == 2:
+                    emoji = "🥈"
+                elif idx == 3:
+                    emoji = "🥉"
+                else:
+                    emoji = "🎮"
+                
+                text += f"{emoji} {p['name']} - {p['frags']} вбивств\n"
+        elif players_count > 0 and not players:
+            text += "⏳ _Гравці підключаються до карти..._\n"
         else:
-            text += "💤 _На сервере нет игроков._\n"
+            text += "💤 _На сервері немає гравців._\n"
             
         return text
         
     except socket.timeout:
-        return "🔴 *Статус сервера*: OFFLINE ❌\n\nСейчас сервер недоступен или выключен."
+        return f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} зараз недоступний або вимкнений."
     except Exception as e:
-        return "⚠️ *Ошибка*: Не удалось получить данные с сервера."
+        return "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."
 
-@bot.message_handler(commands=['info'])
+@bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     status_text = get_cs_status_full()
     bot.reply_to(message, status_text, parse_mode="Markdown")
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
-    print("Telegram bot started successfully...")
-    bot.polling(none_stop=True)
+    print("Telegram bot started successfully with new token...")
+    bot.polling(none_stop=True)   
