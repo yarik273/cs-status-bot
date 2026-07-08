@@ -21,22 +21,22 @@ def run_web_server():
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
-
-# ПРЯМЕ ПОСИЛАННЯ НА ВАШ БАНЕР (Замість капризного ID, який блокувався в групах)
 MAIN_BANNER_URL = "https://ibb.co"
 
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
 def decode_text(byte_data):
-    """Безпечно декодує текст з сервера"""
+    """Безпечно декодує текст з сервера та очищає від системного сміття"""
     try:
-        return byte_data.decode('utf-8').strip()
+        text = byte_data.decode('utf-8').strip()
     except Exception:
         try:
-            return byte_data.decode('cp1251', errors='ignore').strip()
+            text = byte_data.decode('cp1251', errors='ignore').strip()
         except Exception:
-            return byte_data.decode('latin-1', errors='ignore').strip()
+            text = byte_data.decode('latin-1', errors='ignore').strip()
+    
+    return "".join(ch for ch in text if ch.isprintable())
 
 def get_challenge_token(client, ip, port, request_header):
     """Отримує захисний challenge-токен від сервера CS 1.6"""
@@ -97,7 +97,7 @@ def get_cs_status_full():
     """Збирає статус сервера у вигляді чистого тексту"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        client.settimeout(2.5)
+        client.settimeout(4.0)
         
         info_request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
         client.sendto(info_request, (SERVER_IP, SERVER_PORT))
@@ -153,10 +153,14 @@ def get_cs_status_full():
 def send_cs_status(message):
     data = get_cs_status_full()
     
+    # Розумне визначення теми: якщо топік відсутній або дорівнює 1 (дефолт для General), не шлемо зайвих ID
+    thread_id = getattr(message, 'message_thread_id', None)
+    if thread_id == 1:
+        thread_id = None
+        
     if data.get("status") == "online":
         try:
-            # Надсилаємо через відкрите інтернет-посилання URL, яке Telegram пропустить у будь-яку групу
-            bot.send_photo(message.chat.id, photo=MAIN_BANNER_URL, caption=data["text"], parse_mode="Markdown")
+            bot.send_photo(message.chat.id, photo=MAIN_BANNER_URL, caption=data["text"], parse_mode="Markdown", message_thread_id=thread_id)
             return
         except Exception:
             pass
