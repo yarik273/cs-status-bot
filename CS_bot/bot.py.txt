@@ -1,13 +1,27 @@
+import os
 import asyncio
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from valve.source.a2s import ServerQuerier
 
-# --- ��ز ��Ͳ ��� �������Ͳ ---
+# --- Код для обману Render (щоб він думав, що це веб-сайт) ---
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
+    server.serve_forever()
+
+# --- ВАШІ ДАНІ ---
 TOKEN = "8653250290:AAFWG3CdV7-0ryk1s_XgfX6ePctQ67CTZ-E" 
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
-# ------------------------------
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -16,20 +30,23 @@ def get_cs_status():
     try:
         with ServerQuerier((SERVER_IP, int(SERVER_PORT))) as server:
             info = server.info()
-            text = f"?? *������ ������� CS 1.6*:\n\n"
-            text += f"?? �����: {info['server_name']}\n"
-            text += f"??? �����: {info['map']}\n"
-            text += f"?? ������: {info['player_count']}/{info['max_players']}\n"
+            text = f"🎮 *Статус сервера CS 1.6*:\n\n"
+            text += f"📌 Назва: {info['server_name']}\n"
+            text += f"🗺️ Карта: `{info['map_name']}`\n"  # у бібліотеці valve це поле називається 'map_name'
+            text += f"👥 Гравці: `{info['player_count']}/{info['max_players']}`\n"
             return text
     except Exception as e:
-        return "? ������ ����� ����������� ��� ���������."
+        return "❌ Сервер зараз недоступний або вимкнений."
 
 @dp.message(Command("info"))
 async def cmd_info(message: types.Message):
     await message.answer(get_cs_status(), parse_mode="Markdown")
 
 async def main():
+    # Запускаємо веб-сервер у фоновому потоці для Render
+    threading.Thread(target=run_web_server, daemon=True).start()
+    # Запускаємо самого бота
     await dp.start_polling(bot)
 
-if name == "main":
+if __name__ == "__main__":
     asyncio.run(main())
