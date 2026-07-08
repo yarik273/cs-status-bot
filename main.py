@@ -50,8 +50,8 @@ def get_cs_status_direct():
             payload = payload[end + 1:]
             
         if len(payload) >= 4:
-            players = payload[2]
-            max_players = payload[3]
+            players = int(payload[2])
+            max_players = int(payload[3])
         else:
             players, max_players = 0, 0
             
@@ -65,25 +65,30 @@ def get_cs_status_direct():
     except Exception:
         return {"success": False}
 
-# Генерація тільки ТЕКСТУ та кнопок (без картинок)
+# Генерація ТЕКСТУ та кнопок
 def generate_status_message_and_keyboard():
     data = get_cs_status_direct()
     
     if not data["success"]:
-        text = "❌ *Сервер зараз недоступний або вимкнений.*"
+        text = "❌ Сервер зараз недоступний або вимкнений."
         markup = telebot.types.InlineKeyboardMarkup()
         markup.add(telebot.types.InlineKeyboardButton(text="🔄 Оновити", callback_data="refresh_status"))
         return text, markup
         
     p = data["players"]
     m = data["max_players"]
+    
     percent = int((p / m) * 100) if m > 0 else 0
     filled = int((p / m) * 10) if m > 0 else 0
     bar = "🟩" * filled + "⬜" * (10 - filled)
     
-    # Гарний текст
-    text = f"💣 *{data['name']}*\n❤️\n\n"
-    text += f"🗺️ *Карта:* {data['map']}\n"
+    # Очищаємо назву від символів, які ламають код Telegram
+    clean_name = data['name'].replace('*', '').replace('_', '').replace('', '')
+    clean_map = data['map'].replace('*', '').replace('_', '').replace('', '')
+    
+    # Складаємо чистий надійний текст
+    text = f"💣 *{clean_name}*\n❤️\n\n"
+    text += f"🗺️ *Карта:* {clean_map}\n"
     text += f"👥 *Гравці:* {p}/{m}  {bar} *{percent}%*\n"
     text += f"🌐 *IP:* {SERVER_IP}:{SERVER_PORT}\n"
     text += f"🔌 *Сервер:* info\n\n"
@@ -104,15 +109,16 @@ def generate_status_message_and_keyboard():
     
     return text, markup
 
-# Обробник команд (реагує на кнопку інфо і текст)
+# Обробник текстових повідомлень і кнопки "Меню"
 @bot.message_handler(func=lambda msg: msg.text in ['/info', 'info', '/info@cs16_status_server_bot', 'info@cs16_status_server_bot'])
 def send_cs_status(message):
     try:
         text, markup = generate_status_message_and_keyboard()
-        bot.reply_to(message, text, parse_mode="Markdown", reply_markup=markup)
+        bot.send_message(message.chat.id, text, parse_mode="Markdown", reply_markup=markup)
     except Exception as e:
         print(f"Помилка: {e}")
-     # Обробник для кнопки оновлення
+
+# Обробник натискання кнопки під повідомленням
 @bot.callback_query_handler(func=lambda call: call.data == "refresh_status")
 def callback_inline(call):
     try:
@@ -125,4 +131,4 @@ def callback_inline(call):
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True)   
+    bot.polling(none_stop=True)
