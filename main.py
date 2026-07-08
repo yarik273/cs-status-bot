@@ -23,6 +23,7 @@ SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
 bot = telebot.TeleBot(TOKEN)
+bot.remove_webhook()
 
 # Прямой запрос к серверу CS 1.6 без использования сторонней библиотеки valve
 def get_cs_status_direct():
