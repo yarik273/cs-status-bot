@@ -1,11 +1,10 @@
 import os
 import socket
-import struct
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Мікро-веб-сервер для Render
+# --- 1. ВЕБ-СЕРВЕР ДЛЯ RENDER ---
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -17,15 +16,34 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
+# --- 2. ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
 TOKEN = "8653250290:AAFWG3CdV7-Oryk1s_XgfX6ePctQ67CTZ-E"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
+# --- 3. БАЗА КАРТИНОК ДЛЯ КАРТ ---
+# Сюди додавайте назви карт із вашого сервера та посилання на їхні фото
+MAP_IMAGES = {
+    "de_dust2": "https://vserb.ru",
+    "de_inferno": "https://vserb.ru",
+    "de_train": "https://vserb.ru",
+    "de_nuke": "https://vserb.ru",
+    "cs_mansion": "https://vserb.ru",
+    "cs_assault": "https://vserb.ru",
+    "awp_india": "https://vserb.ru"
+}
+
+# Картинка, якщо карти немає в списку MAP_IMAGES вище
+DEFAULT_ONLINE_IMAGE = "https://vserb.ru"
+
+# Картинка, яка надішлеться, якщо сервер вимкнений (Офлайн)
+OFFLINE_IMAGE = "https://imgur.com"
+
+# Ініціалізація бота
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
-# Отримання статусу сервера CS 1.6
+# --- 4. ФУНКЦІЯ ЗАПИТУ ДО СЕРВЕРА CS 1.6 ---
 def get_cs_status_direct():
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -35,6 +53,9 @@ def get_cs_status_direct():
         client.sendto(request, (SERVER_IP, SERVER_PORT))
         
         data, _ = client.recvfrom(4096)
+        if len(data) < 5 or data[:4] != b'\xFF\xFF\xFF\xFF':
+            return False, None, "❌ Отримано некоректну відповідь від сервера."
+            
         payload = data[5:]
         
         server_name_end = payload.find(b'\x00')
@@ -49,86 +70,51 @@ def get_cs_status_direct():
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
             
-        if len(payload) >= 4:
-            players = int(payload[2])
-            max_players = int(payload[3])
+        payload = payload[2:]
+            
+        if len(payload) >= 2:
+            players = payload[0]
+            max_players = payload[1]
         else:
             players, max_players = 0, 0
-            
-        return {
-            "success": True,
-            "name": server_name,
-            "map": current_map,
-            "players": players,
-            "max_players": max_players
-        }
-    except Exception:
-        return {"success": False}
-
-# Генерація ТЕКСТУ та кнопок
-def generate_status_message_and_keyboard():
-    data = get_cs_status_direct()
-    
-    if not data["success"]:
-        text = "❌ Сервер зараз недоступний або вимкнений."
-        markup = telebot.types.InlineKeyboardMarkup()
-        markup.add(telebot.types.InlineKeyboardButton(text="🔄 Оновити", callback_data="refresh_status"))
-        return text, markup
         
-    p = data["players"]
-    m = data["max_players"]
-    
-    percent = int((p / m) * 100) if m > 0 else 0
-    filled = int((p / m) * 10) if m > 0 else 0
-    bar = "🟩" * filled + "⬜" * (10 - filled)
-    
-    # Очищаємо назву від символів, які ламають код Telegram
-    clean_name = data['name'].replace('*', '').replace('_', '').replace('', '')
-    clean_map = data['map'].replace('*', '').replace('_', '').replace('', '')
-    
-    # Складаємо чистий надійний текст
-    text = f"💣 *{clean_name}*\n❤️\n\n"
-    text += f"🗺️ *Карта:* {clean_map}\n"
-    text += f"👥 *Гравці:* {p}/{m}  {bar} *{percent}%*\n"
-    text += f"🌐 *IP:* {SERVER_IP}:{SERVER_PORT}\n"
-    text += f"🔌 *Сервер:* info\n\n"
-    
-    if p == 0:
-        text += "🟡 *Сервер порожній*\nНа сервері поки нікого немає..."
-    else:
-        text += "🟢 *Гра в самому розпалі!* Заходь грати!"
+        text = f"🟢 *СЕРВЕР ОНЛАЙН*\n\n"
+        text += f"🎮 Назва: {server_name}\n"
+        text += f"🗺 Карта: {current_map}\n"
+        text += f"👥 Гравці: *{players}/{max_players}*\n"
         
-    markup = telebot.types.InlineKeyboardMarkup()
-    connect_url = f"steam://connect/{SERVER_IP}:{SERVER_PORT}"
-    
-    btn_connect = telebot.types.InlineKeyboardButton(text="🎮 Підключитися", url=connect_url)
-    btn_refresh = telebot.types.InlineKeyboardButton(text="🔄 Оновити статус", callback_data="refresh_status")
-    
-    markup.add(btn_connect)
-    markup.add(btn_refresh)
-    
-    return text, markup
+        return True, current_map, text
+    except Exception as e:
+        text = "🔴 *СЕРВЕР ОФЛАЙН*\n\n❌ Сервер зараз недоступний або вимкнений."
+        return False, None, text
 
-# Обробник текстових повідомлень і кнопки "Меню"
-@bot.message_handler(func=lambda msg: msg.text in ['/info', 'info', '/info@cs16_status_server_bot', 'info@cs16_status_server_bot'])
+# --- 5. ОБРОБКА КОМАНДИ /info ---
+@bot.message_handler(commands=['info'])
 def send_cs_status(message):
+    # Повідомляємо користувача, що бот завантажує фото
     try:
-        text, markup = generate_status_message_and_keyboard()
-        bot.send_message(message.chat.id, text, parse_mode="Markdown", reply_markup=markup)
-    except Exception as e:
-        print(f"Помилка: {e}")
+        bot.send_chat_action(message.chat.id, 'upload_photo')
+    except:
+        pass
+    
+    is_online, current_map, status_text = get_cs_status_direct()
+    
+    if is_online:
+        # Шукаємо картинку карти у списку, якщо немає — беремо стандартну
+        photo_url = MAP_IMAGES.get(current_map, DEFAULT_ONLINE_IMAGE)
+    else:
+        # Картинка офлайну
+        photo_url = OFFLINE_IMAGE
 
-# Обробник натискання кнопки під повідомленням
-@bot.callback_query_handler(func=lambda call: call.data == "refresh_status")
-def callback_inline(call):
     try:
-        text, markup = generate_status_message_and_keyboard()
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=text, parse_mode="Markdown", reply_markup=markup)
+        # Надсилаємо фото, а текст статусу буде описом під ним
+        bot.send_photo(message.chat.id, photo_url, caption=status_text, parse_mode="Markdown")
     except Exception as e:
-        print(f"Помилка: {e}")
-    bot.answer_callback_query(call.id)
+        # Якщо картинка не завантажилася, надсилаємо просто текст, щоб бот не падав
+        bot.reply_to(message, status_text, parse_mode="Markdown")
 
-if __name__ == "__main__":
+# --- 6. ЗАПУСК БОТА ТА ВЕБ-СЕРВЕРА ---
+if __name__ == "_-main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
