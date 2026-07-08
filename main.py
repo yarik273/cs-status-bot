@@ -1,6 +1,7 @@
 import os
 import socket
 import threading
+import struct
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
@@ -21,43 +22,48 @@ TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
-# --- 3. БАЗА КАРТИНОК ДЛЯ КАРТ ---
-# Сюди додавайте назви карт із вашого сервера та посилання на їхні фото
+# --- 3. БАЗА КАРТИНОК ДЛЯ КАРТ (ЛОКАЛЬНІ ФАЙЛИ) ---
+# Назви зліва чітко відповідають картам з вашого комп'ютера
 MAP_IMAGES = {
-    "de_dust2": "https://vserb.ru",
-    "de_inferno": "https://vserb.ru",
-    "de_train": "https://vserb.ru",
-    "de_nuke": "https://vserb.ru",
-    "cs_mansion": "https://vserb.ru",
-    "cs_assault": "https://vserb.ru",
-    "awp_india": "https://vserb.ru"
+    "cs_mansion": "images/cs_mansion.jpg",
+    "cs_assault": "images/cs_assault.jpg",
+    "de_westwood": "images/de_westwood.jpg",
+    "de_nuke": "images/de_nuke.jpg",
+    "de_dust2": "images/de_dust2.jpg",
+    "de_dust2_2x2": "images/de_dust2_2x2.jpg",
+    "de_dust2_3x3": "images/de_dust2_3x3.jpg",
+    "de_inferno": "images/de_inferno.jpg",
+    "de_aztec": "images/de_aztec.jpg",
+    "de_train": "images/de_train.jpg",
+    "de_tuscan": "images/de_tuscan.jpg",
+    "de_tuscan": "images/de_tuscan.jpg",
+    "fy_buzzkill2005": "images/fy_buzzkill2005.jpg",
+    "aim_zone_esl": "images/aim_zone_esl.jpg",
+    "aim_mortal_esl": "images/aim_mortal_esl.jpg"
 }
 
-# Картинка, якщо карти немає в списку MAP_IMAGES вище
-DEFAULT_ONLINE_IMAGE = "https://vserb.ru"
+# Дефолтні картинки, якщо карти немає у списку або сервер вимкнений
+DEFAULT_ONLINE_IMAGE = "images/default.jpg"
+OFFLINE_IMAGE = "images/offline.jpg"
 
-# Картинка, яка надішлеться, якщо сервер вимкнений (Офлайн)
-OFFLINE_IMAGE = "https://imgur.com"
-
-# Ініціалізація бота
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
-# --- 4. ФУНКЦІЯ ЗАПИТУ ДО СЕРВЕРА CS 1.6 ---
+# --- 4. ФУНКЦІЯ ЗАПИТУ ДО СЕРВЕРА (СТАТУС + ГРАВЦІ) ---
 def get_cs_status_direct():
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        client.settimeout(3.0)
+        client.settimeout(2.5)
         
-        request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
-        client.sendto(request, (SERVER_IP, SERVER_PORT))
+        # --- КРОК А: Отримання інформації про карту (A2S_INFO) ---
+        request_info = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
+        client.sendto(request_info, (SERVER_IP, SERVER_PORT))
         
         data, _ = client.recvfrom(4096)
         if len(data) < 5 or data[:4] != b'\xFF\xFF\xFF\xFF':
             return False, None, "❌ Отримано некоректну відповідь від сервера."
             
         payload = data[5:]
-        
         server_name_end = payload.find(b'\x00')
         server_name = payload[:server_name_end].decode('utf-8', errors='ignore')
         payload = payload[server_name_end + 1:]
@@ -71,19 +77,57 @@ def get_cs_status_direct():
             payload = payload[end + 1:]
             
         payload = payload[2:]
-            
-        if len(payload) >= 2:
-            players = payload[0]
-            max_players = payload[1]
-        else:
-            players, max_players = 0, 0
+        players_count = payload if len(payload) >= 1 else 0
+        max_players = payload if len(payload) >= 2 else 0
         
+        # --- КРОК Б: Отримання нікнеймів гравців (A2S_PLAYER) ---
+        player_names = []
+        if players_count > 0:
+            try:
+                # ЗапитуємоChallenge-номер для GoldSource
+                request_challenge = b'\xFF\xFF\xFF\xFF\x55\xFF\xFF\xFF\xFF'
+                client.sendto(request_challenge, (SERVER_IP, SERVER_PORT))
+                data_ch, _ = client.recvfrom(4096)
+                
+                if len(data_ch) >= 9 and data_ch == 0x41:
+                    challenge = data_ch[5:9]
+                    request_players = b'\xFF\xFF\xFF\xFF\x55' + challenge
+                    client.sendto(request_players, (SERVER_IP, SERVER_PORT))
+                    data_pl, _ = client.recvfrom(4096)
+                    
+                    if len(data_pl) > 5 and data_pl == 0x44:
+                        pl_payload = data_pl[6:]
+                        
+                        while len(pl_payload) > 0:
+                         pl_payload = pl_payload[1:] # Пропускаємо індекс
+                            name_end = pl_payload.find(b'\x00')
+                            if name_end == -1: break
+                            name = pl_payload[:name_end].decode('utf-8', errors='ignore').strip()
+                            pl_payload = pl_payload[name_end + 1:]
+                            pl_payload = pl_payload[8:] # Пропускаємо фраги та час
+                            
+                            if name:
+                                player_names.append(name)
+            except Exception:
+                pass
+
+        # Формуємо красивий текст
         text = f"🟢 *СЕРВЕР ОНЛАЙН*\n\n"
         text += f"🎮 Назва: {server_name}\n"
         text += f"🗺 Карта: {current_map}\n"
-        text += f"👥 Гравці: *{players}/{max_players}*\n"
+        text += f"👥 Гравці: *{players_count}/{max_players}*\n\n"
         
+        if player_names:
+            text += "👤 *Список гравців в онлайні:*\n"
+            for i, name in enumerate(player_names, 1):
+                text += f"{i}. {name}\n"
+        elif players_count > 0:
+            text += "⏳ _Оновлюю список гравців..._\n"
+        else:
+            text += "💤 _На сервері зараз немає гравців._\n"
+            
         return True, current_map, text
+        
     except Exception as e:
         text = "🔴 *СЕРВЕР ОФЛАЙН*\n\n❌ Сервер зараз недоступний або вимкнений."
         return False, None, text
@@ -91,7 +135,6 @@ def get_cs_status_direct():
 # --- 5. ОБРОБКА КОМАНДИ /info ---
 @bot.message_handler(commands=['info'])
 def send_cs_status(message):
-    # Повідомляємо користувача, що бот завантажує фото
     try:
         bot.send_chat_action(message.chat.id, 'upload_photo')
     except:
@@ -100,17 +143,22 @@ def send_cs_status(message):
     is_online, current_map, status_text = get_cs_status_direct()
     
     if is_online:
-        # Шукаємо картинку карти у списку, якщо немає — беремо стандартну
-        photo_url = MAP_IMAGES.get(current_map, DEFAULT_ONLINE_IMAGE)
+        photo_path = MAP_IMAGES.get(current_map, DEFAULT_ONLINE_IMAGE)
     else:
-        # Картинка офлайну
-        photo_url = OFFLINE_IMAGE
+        photo_path = OFFLINE_IMAGE
 
     try:
-        # Надсилаємо фото, а текст статусу буде описом під ним
-        bot.send_photo(message.chat.id, photo_url, caption=status_text, parse_mode="Markdown")
+        if os.path.exists(photo_path):
+            with open(photo_path, 'rb') as photo:
+                bot.send_photo(message.chat.id, photo, caption=status_text, parse_mode="Markdown")
+        else:
+            # Якщо якоїсь картинки не вистачає, надсилаємо дефолтну
+            if os.path.exists(DEFAULT_ONLINE_IMAGE):
+                with open(DEFAULT_ONLINE_IMAGE, 'rb') as photo:
+                    bot.send_photo(message.chat.id, photo, caption=status_text, parse_mode="Markdown")
+            else:
+                bot.reply_to(message, status_text, parse_mode="Markdown")
     except Exception as e:
-        # Якщо картинка не завантажилася, надсилаємо просто текст, щоб бот не падав
         bot.reply_to(message, status_text, parse_mode="Markdown")
 
 # --- 6. ЗАПУСК БОТА ТА ВЕБ-СЕРВЕРА ---
@@ -118,3 +166,4 @@ if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
+    
