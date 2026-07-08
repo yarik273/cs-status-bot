@@ -5,7 +5,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Микро-веб-сервер для прохождения проверки Render
+# Мікро-веб-сервер для проходження перевірки Render
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -17,7 +17,7 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАННЫЕ ВАШЕГО БОТА И СЕРВЕРА ---
+# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
@@ -26,7 +26,7 @@ bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
 def decode_text(byte_data):
-    """Безопасно декодирует текст с сервера"""
+    """Безпечно декодує text з сервера"""
     try:
         return byte_data.decode('utf-8').strip()
     except Exception:
@@ -36,7 +36,7 @@ def decode_text(byte_data):
             return byte_data.decode('latin-1', errors='ignore').strip()
 
 def get_challenge_token(client, ip, port, request_header):
-    """Получает защитный challenge-токен от сервера CS 1.6"""
+    """Отримує захисний challenge-токен від сервера CS 1.6"""
     req = b'\xFF\xFF\xFF\xFF' + request_header + b'\xFF\xFF\xFF\xFF'
     client.sendto(req, (ip, port))
     try:
@@ -48,7 +48,7 @@ def get_challenge_token(client, ip, port, request_header):
     return b'\xFF\xFF\xFF\xFF'
 
 def get_cs_players(client, ip, port):
-    """Получает список игроков с количеством их убийств (фрагов)"""
+    """Отримує список гравців з кількістю їхніх вбивств (фрагів)"""
     token = get_challenge_token(client, ip, port, b'U')
     req = b'\xFF\xFF\xFF\xFFU' + token
     client.sendto(req, (ip, port))
@@ -62,14 +62,14 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = int(payload[0])
+        num_players = int(payload)
         payload = payload[1:]
         players_list = []
         
         for _ in range(num_players):
             if len(payload) < 2:
                 break
-            payload = payload[1:]  # Пропуск индекса
+            payload = payload[1:]  # Пропуск індексу
             
             name_end = payload.find(b'\x00')
             if name_end == -1:
@@ -79,7 +79,7 @@ def get_cs_players(client, ip, port):
             
             if len(payload) < 8:
                 break
-            frags = struct.unpack('<i', payload[:4])[0]
+            frags = struct.unpack('<i', payload[:4])
             payload = payload[8:]
             
             if name:
@@ -91,7 +91,7 @@ def get_cs_players(client, ip, port):
         return []
 
 def get_cs_status_full():
-    """Собирает статус сервера в красивом стиле"""
+    """Збирає статус сервера у вигляді чистого тексту"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.settimeout(4.0)
@@ -102,26 +102,26 @@ def get_cs_status_full():
         data, _ = client.recvfrom(4096)
         payload = data[5:]
         
-        # Чтение названия сервера
+        # Читання назви сервера
         server_name_end = payload.find(b'\x00')
         server_name = decode_text(payload[:server_name_end])
         server_name = server_name.lstrip('0Оo○◦ \t')
         payload = payload[server_name_end + 1:]
         
-        # Чтение карты
+        # Читання карти
         map_end = payload.find(b'\x00')
         current_map = decode_text(payload[:map_end])
         payload = payload[map_end + 1:]
         
-        # Пропуск папки и названия игры
+        # Пропуск папки та назви гри
         for _ in range(2):
             end = payload.find(b'\x00')
             if end != -1:
                 payload = payload[end + 1:]
-               # Безопасное чтение игроков по фиксированным байтам
+               # Безпечне читання гравців по фіксованих байтах
         if len(payload) >= 4:
-            players_count = int(payload[2])
-            max_players = int(payload[3])
+            players_count = int(payload)
+            max_players = int(payload)
         else:
             players_count, max_players = 0, 0
             
@@ -156,7 +156,8 @@ def send_cs_status(message):
     
     if data.get("status") == "online":
         try:
-            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown")
+            # ТУТ ЗМІНЕНО МЕТОД: відправляємо картинку як точний реплай-відповідь на повідомлення користувача
+            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown", reply_to_message_id=message.message_id)
             return
         except Exception:
             pass
