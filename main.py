@@ -62,22 +62,28 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = int(payload)
+        num_players = int(payload[0])
         payload = payload[1:]
         players_list = []
         
-        # Цикл полностью переписан в строгие безопасные однострочники без скрытых табов
         for _ in range(num_players):
-            if len(payload) < 2: break
-            payload = payload[1:]
+            if len(payload) < 2:
+                break
+            payload = payload[1:]  # Пропуск индекса
+            
             name_end = payload.find(b'\x00')
-            if name_end == -1: break
+            if name_end == -1:
+                break
             name = decode_text(payload[:name_end])
             payload = payload[name_end + 1:]
-            if len(payload) < 8: break
-            frags = struct.unpack('<i', payload[:4])
+            
+            if len(payload) < 8:
+                break
+            frags = struct.unpack('<i', payload[:4])[0]
             payload = payload[8:]
-            if name: players_list.append({"name": name, "frags": frags})
+            
+            if name:
+                players_list.append({"name": name, "frags": frags})
                 
         players_list.sort(key=lambda x: x["frags"], reverse=True)
         return players_list
@@ -88,7 +94,7 @@ def get_cs_status_full():
     """Собирает статус сервера в красивом стиле"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        client.settimeout(3.5)
+        client.settimeout(4.0)
         
         info_request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
         client.sendto(info_request, (SERVER_IP, SERVER_PORT))
@@ -108,10 +114,16 @@ def get_cs_status_full():
         payload = payload[map_end + 1:]
         
         # Пропуск папки и названия игры
-        for _ in range(2): payload = payload[payload.find(b'\x00') + 1:] if payload.find(b'\x00') != -1 else payload
-
-        # Чтение количества игроков
-players_count, max_players = (int(payload), int(payload)) if len(payload) >= 4 else (0, 0)
+        for _ in range(2):
+            end = payload.find(b'\x00')
+            if end != -1:
+                payload = payload[end + 1:]
+               # Безопасное чтение игроков по фиксированным байтам
+        if len(payload) >= 4:
+            players_count = int(payload[2])
+            max_players = int(payload[3])
+        else:
+            players_count, max_players = 0, 0
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -154,4 +166,4 @@ def send_cs_status(message):
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True)
+    bot.polling(none_stop=True) 
