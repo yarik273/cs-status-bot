@@ -17,7 +17,7 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
+# --- ДАНІ ВАШЕГО БОТА І СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
@@ -118,8 +118,8 @@ def get_cs_status_full():
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
             # Читання кількості гравців
-        players_count = int(payload[0]) if len(payload) >= 3 else 0
-        max_players = int(payload[1]) if len(payload) >= 4 else 0
+        players_count = int(payload[2]) if len(payload) >= 3 else 0
+        max_players = int(payload[3]) if len(payload) >= 4 else 0
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -152,28 +152,21 @@ def get_cs_status_full():
     except Exception as e:
         return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
-# Хендлер для отримання file_id картинки (потрібно зробити 1 раз)
-@bot.message_handler(content_types=['photo'])
-def catch_photo_id(message):
-    # Бот напише в консоль або чат ID картинки, яку ви йому надішлете
-    photo_id = message.photo[-1].file_id
-    bot.reply_to(message, f"Ось ID вашої картинки, скопіюйте його:\n{photo_id}")
-
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     data = get_cs_status_full()
     
-    # Сюди ми вставимо постійний ID картинки після першого тесту
-    # Поки що ставимо перевірку: якщо ID немає, шлемо текстом
-    MAIN_BANNER_ID = " AgADAgAD1qcxG_8AAUhc_3b3_201_3_2_1_1" 
+    # Сюди вставлено ваш унікальний ID картинки
+    MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
     
-    try:
-        # Пробуємо надіслати картинку за її унікальним посиланням або ID
-        # Для початку використовуємо пряме завантаження через буфер або дефолтний ID
-        bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown")
-    except Exception:
-        # Якщо Telegram ще не знає цей ID, надсилаємо просто текст, щоб не ламати бота
-        bot.reply_to(message, data["text"], parse_mode="Markdown")
+    if data.get("status") == "online":
+        try:
+            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown")
+            return
+        except Exception:
+            pass
+            
+    bot.reply_to(message, data["text"], parse_mode="Markdown")
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
