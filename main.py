@@ -5,7 +5,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Микро-веб-сервер для прохождения проверки Render
+# Мікро-веб-сервер для проходження перевірки Render
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -17,7 +17,7 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАННЫЕ ВАШЕГО БОТА И СЕРВЕРА ---
+# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
@@ -25,8 +25,20 @@ SERVER_PORT = 27036
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
+def decode_text(byte_data):
+    """Безпечно декодує текст з урахуванням специфіки ігрових серверів"""
+    try:
+        # Спочатку пробуємо розпізнати як UTF-8
+        return byte_data.decode('utf-8').strip()
+    except Exception:
+        try:
+            # Якщо не вийшло — використовуємо стандартне кодування для нашого регіону
+            return byte_data.decode('cp1251', errors='ignore').strip()
+        except Exception:
+            return byte_data.decode('latin-1', errors='ignore').strip()
+
 def get_challenge_token(client, ip, port, request_header):
-    """Получает защитный challenge-токен от сервера CS 1.6"""
+    """Отримує захисний challenge-токен від сервера CS 1.6"""
     req = b'\xFF\xFF\xFF\xFF' + request_header + b'\xFF\xFF\xFF\xFF'
     client.sendto(req, (ip, port))
     try:
@@ -38,7 +50,7 @@ def get_challenge_token(client, ip, port, request_header):
     return b'\xFF\xFF\xFF\xFF'
 
 def get_cs_players(client, ip, port):
-    """Получает список игроков с количеством их убийств (фрагов)"""
+    """Отримує список гравців з кількістю їхніх вбивств (фрагов)"""
     token = get_challenge_token(client, ip, port, b'U')
     req = b'\xFF\xFF\xFF\xFFU' + token
     client.sendto(req, (ip, port))
@@ -64,7 +76,7 @@ def get_cs_players(client, ip, port):
             name_end = payload.find(b'\x00')
             if name_end == -1:
                 break
-            name = payload[:name_end].decode('utf-8', errors='ignore').strip()
+            name = decode_text(payload[:name_end])
             payload = payload[name_end + 1:]
             
             if len(payload) < 8:
@@ -81,7 +93,7 @@ def get_cs_players(client, ip, port):
         return []
 
 def get_cs_status_full():
-    """Собирает статус сервера в красивом стиле"""
+    """Збирає статус сервера у красивому стилі з виправленням тексту"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.settimeout(2.5)
@@ -92,12 +104,18 @@ def get_cs_status_full():
         data, _ = client.recvfrom(4096)
         payload = data[5:]
         
+        # Декодуємо назву сервера
         server_name_end = payload.find(b'\x00')
-        server_name = payload[:server_name_end].decode('utf-8', errors='ignore')
+        server_name = decode_text(payload[:server_name_end])
+        
+        # ВИДАЛЯЄМО БАГ З НУЛЕМ АБО ЛІТЕРОЮ О НА ПОЧАТКУ НАЗВИ
+        server_name = server_name.lstrip('0Оo○◦ \t')
+        
         payload = payload[server_name_end + 1:]
         
+        # Декодуємо поточну карту
         map_end = payload.find(b'\x00')
-        current_map = payload[:map_end].decode('utf-8', errors='ignore')
+        current_map = decode_text(payload[:map_end])
         payload = payload[map_end + 1:]
         
         for _ in range(2):
