@@ -5,7 +5,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Мікро-веб-сервер для проходження перевірки Render
+# Микро-веб-сервер для прохождения проверки Render
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -17,7 +17,7 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
+# --- ДАННЫЕ ВАШЕГО БОТА И СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
@@ -26,19 +26,17 @@ bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
 def decode_text(byte_data):
-    """Безпечно декодує текст з урахуванням специфіки ігрових серверів"""
+    """Безопасно декодирует текст с сервера"""
     try:
-        # Спочатку пробуємо розпізнати як UTF-8
         return byte_data.decode('utf-8').strip()
     except Exception:
         try:
-            # Якщо не вийшло — використовуємо стандартне кодування для нашого регіону
             return byte_data.decode('cp1251', errors='ignore').strip()
         except Exception:
             return byte_data.decode('latin-1', errors='ignore').strip()
 
 def get_challenge_token(client, ip, port, request_header):
-    """Отримує захисний challenge-токен від сервера CS 1.6"""
+    """Получает защитный challenge-токен от сервера CS 1.6"""
     req = b'\xFF\xFF\xFF\xFF' + request_header + b'\xFF\xFF\xFF\xFF'
     client.sendto(req, (ip, port))
     try:
@@ -50,7 +48,7 @@ def get_challenge_token(client, ip, port, request_header):
     return b'\xFF\xFF\xFF\xFF'
 
 def get_cs_players(client, ip, port):
-    """Отримує список гравців з кількістю їхніх вбивств (фрагов)"""
+    """Получает список игроков с количеством их убийств (фрагов)"""
     token = get_challenge_token(client, ip, port, b'U')
     req = b'\xFF\xFF\xFF\xFFU' + token
     client.sendto(req, (ip, port))
@@ -64,7 +62,7 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = payload[0]
+        num_players = payload
         payload = payload[1:]
         players_list = []
         
@@ -81,7 +79,7 @@ def get_cs_players(client, ip, port):
             
             if len(payload) < 8:
                 break
-            frags = struct.unpack('<i', payload[:4])[0]
+            frags = struct.unpack('<i', payload[:4])
             payload = payload[8:]
             
             if name:
@@ -93,7 +91,7 @@ def get_cs_players(client, ip, port):
         return []
 
 def get_cs_status_full():
-    """Збирає статус сервера у красивому стилі з виправленням тексту"""
+    """Собирает статус сервера и возвращает структуру данных (текст + название карты)"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.settimeout(2.5)
@@ -104,16 +102,12 @@ def get_cs_status_full():
         data, _ = client.recvfrom(4096)
         payload = data[5:]
         
-        # Декодуємо назву сервера
         server_name_end = payload.find(b'\x00')
         server_name = decode_text(payload[:server_name_end])
-        
-        # ВИДАЛЯЄМО БАГ З НУЛЕМ АБО ЛІТЕРОЮ О НА ПОЧАТКУ НАЗВИ
-        server_name = server_name.lstrip('0Оo○◦ \t')
+        server_name = server_name.lstrip('0Оo○◦ \t') # Очистка от нуля на начале
         
         payload = payload[server_name_end + 1:]
         
-        # Декодуємо поточну карту
         map_end = payload.find(b'\x00')
         current_map = decode_text(payload[:map_end])
         payload = payload[map_end + 1:]
@@ -123,8 +117,8 @@ def get_cs_status_full():
             payload = payload[end + 1:]
             
         if len(payload) >= 4:
-            players_count = payload[2]
-            max_players = payload[3]
+           players_count = payload
+            max_players = payload
         else:
             players_count, max_players = 0, 0
             
@@ -152,19 +146,47 @@ def get_cs_status_full():
         else:
             text += "💤 _На сервері немає гравців._\n"
             
-        return text
+        return {"status": "online", "text": text, "map": current_map}
         
     except socket.timeout:
-        return f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} зараз недоступний або вимкнений."
+        return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} зараз недоступний або вимкнений."}
     except Exception as e:
-        return "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."
+        return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
-    status_text = get_cs_status_full()
-    bot.reply_to(message, status_text, parse_mode="Markdown")
+    data = get_cs_status_full()
+    
+    # Если сервер онлайн, пробуем отправить фото карты
+    if data.get("status") == "online":
+        map_name = data["map"]
+        # Собираем путь к картинке. Если папка называется Images, ставим 'Images/имя_карты.jpg'
+        # Поддерживаем два расширения на всякий случай (jpg и png)
+        photo_path_jpg = f"Images/{map_name}.jpg"
+        photo_path_png = f"Images/{map_name}.png"
+        photo_default = "Images/default.jpg" # Картинка-заглушка
+        
+        selected_photo = None
+        if os.path.exists(photo_path_jpg):
+            selected_photo = photo_path_jpg
+        elif os.path.exists(photo_path_png):
+            selected_photo = photo_path_png
+        elif os.path.exists(photo_default):
+            selected_photo = photo_default
+            
+        # Если картинка найдена на сервере — отправляем как фото с описанием
+        if selected_photo:
+            try:
+                with open(selected_photo, 'rb') as photo:
+                    bot.send_photo(message.chat.id, photo, caption=data["text"], parse_mode="Markdown")
+                return
+            except Exception:
+                pass # Если не удалось прочесть файл, отправим просто текст ниже
+                
+    # Если сервер оффлайн или картинка не найдена — отправляем обычное текстовое сообщение
+    bot.reply_to(message, data["text"], parse_mode="Markdown")
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True)
+    bot.polling(none_stop=True) 
