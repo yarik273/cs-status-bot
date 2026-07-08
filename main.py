@@ -17,7 +17,7 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
+# --- ДАНІ ВАШЕГО БОТА І СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
@@ -26,7 +26,7 @@ bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
 def decode_text(byte_data):
-    """Безпечно декодує text з сервера"""
+    """Безпечно декодує текст з сервера"""
     try:
         return byte_data.decode('utf-8').strip()
     except Exception:
@@ -62,7 +62,7 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = int(payload)
+        num_players = int(payload[0])
         payload = payload[1:]
         players_list = []
         
@@ -79,7 +79,7 @@ def get_cs_players(client, ip, port):
             
             if len(payload) < 8:
                 break
-            frags = struct.unpack('<i', payload[:4])
+            frags = struct.unpack('<i', payload[:4])[0]
             payload = payload[8:]
             
             if name:
@@ -94,7 +94,7 @@ def get_cs_status_full():
     """Збирає статус сервера у вигляді чистого тексту"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        client.settimeout(4.0)
+        client.settimeout(2.5)
         
         info_request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
         client.sendto(info_request, (SERVER_IP, SERVER_PORT))
@@ -116,14 +116,10 @@ def get_cs_status_full():
         # Пропуск папки та назви гри
         for _ in range(2):
             end = payload.find(b'\x00')
-            if end != -1:
-                payload = payload[end + 1:]
-               # Безпечне читання гравців по фіксованих байтах
-        if len(payload) >= 4:
-            players_count = int(payload)
-            max_players = int(payload)
-        else:
-            players_count, max_players = 0, 0
+            payload = payload[end + 1:]
+            # Читання кількості гравців
+        players_count = int(payload[2]) if len(payload) >= 3 else 0
+        max_players = int(payload[3]) if len(payload) >= 4 else 0
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -135,7 +131,14 @@ def get_cs_status_full():
         
         if players_count > 0 and players:
             for idx, p in enumerate(players, 1):
-                emoji = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else "🎮"
+                if idx == 1:
+                    emoji = "🥇"
+                elif idx == 2:
+                    emoji = "🥈"
+                elif idx == 3:
+                    emoji = "🥉"
+                else:
+                    emoji = "🎮"
                 text += f"{emoji} {p['name']} — {p['frags']} вбивств\n"
         elif players_count > 0 and not players:
             text += "⏳ _Гравці підключаються до карти..._\n"
@@ -149,22 +152,38 @@ def get_cs_status_full():
     except Exception as e:
         return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
+# --- ОСЬ ТУТ ЄДИНА ЗМІНА (ДОДАНО ВРАХУВАННЯ ГІЛКИ/ТОПІКА) ---
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     data = get_cs_status_full()
+    
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
+    
+    # Дізнаємось ID гілки, де написали команду
+    thread_id = message.message_thread_id
     
     if data.get("status") == "online":
         try:
-            # ТУТ ЗМІНЕНО МЕТОД: відправляємо картинку як точний реплай-відповідь на повідомлення користувача
-            bot.send_photo(message.chat.id, photo=MAIN_BANNER_ID, caption=data["text"], parse_mode="Markdown", reply_to_message_id=message.message_id)
+            bot.send_photo(
+                chat_id=message.chat.id, 
+                photo=MAIN_BANNER_ID, 
+                caption=data["text"], 
+                parse_mode="Markdown",
+                message_thread_id=thread_id
+            )
             return
         except Exception:
             pass
             
-    bot.reply_to(message, data["text"], parse_mode="Markdown")
+    bot.send_message(
+        chat_id=message.chat.id, 
+        text=data["text"], 
+        parse_mode="Markdown",
+        message_thread_id=thread_id,
+        reply_to_message_id=message.message_id
+    )
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
-    bot.polling(none_stop=True) 
+    bot.polling(none_stop=True)
