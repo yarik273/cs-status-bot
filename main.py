@@ -5,7 +5,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Мікро-веб-сервер для проходження перевірки Render
+# Микро-веб-сервер для прохождения проверки Render
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -17,7 +17,7 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
+# --- ДАННЫЕ ВАШЕГО БОТА И СЕРВЕРА ---
 TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
@@ -26,7 +26,7 @@ bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
 def get_challenge_token(client, ip, port, request_header):
-    """Отримує захисний challenge-токен від сервера CS 1.6"""
+    """Получает защитный challenge-токен от сервера CS 1.6"""
     req = b'\xFF\xFF\xFF\xFF' + request_header + b'\xFF\xFF\xFF\xFF'
     client.sendto(req, (ip, port))
     try:
@@ -38,7 +38,7 @@ def get_challenge_token(client, ip, port, request_header):
     return b'\xFF\xFF\xFF\xFF'
 
 def get_cs_players(client, ip, port):
-    """Отримує список гравців з кількістю їхніх вбивств (фрагів)"""
+    """Получает список игроков с количеством их убийств (фрагов)"""
     token = get_challenge_token(client, ip, port, b'U')
     req = b'\xFF\xFF\xFF\xFFU' + token
     client.sendto(req, (ip, port))
@@ -81,7 +81,7 @@ def get_cs_players(client, ip, port):
         return []
 
 def get_cs_status_full():
-    """Збирає статус сервера у красивому стилі"""
+    """Собирает статус сервера в красивом стиле"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.settimeout(2.5)
@@ -116,7 +116,7 @@ def get_cs_status_full():
         text += f"🖥️ *{server_name}*\n"
         text += f"🌐 *IP*: {SERVER_IP}:{SERVER_PORT}\n"
         text += f"🗺️ *Карта*: {current_map}\n"
-text += f"👥 *Гравці*: {players_count}/{max_players}\n\n"
+        text += f"👥 *Гравці*: {players_count}/{max_players}\n\n"
         
         if players_count > 0 and players:
             for idx, p in enumerate(players, 1):
@@ -128,7 +128,7 @@ text += f"👥 *Гравці*: {players_count}/{max_players}\n\n"
                     emoji = "🥉"
                 else:
                     emoji = "🎮"
-                text += f"{emoji} {p['name']} - {p['frags']} вбивств\n"
+                text += f"{emoji} {p['name']} — {p['frags']} вбивств\n"
         elif players_count > 0 and not players:
             text += "⏳ _Гравці підключаються до карти..._\n"
         else:
@@ -146,7 +146,7 @@ def send_cs_status(message):
     status_text = get_cs_status_full()
     bot.reply_to(message, status_text, parse_mode="Markdown")
 
-if __name__ == "__main__":
+if name == "main":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
