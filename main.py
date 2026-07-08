@@ -136,7 +136,7 @@ def callback_inline(call):
         pass
     bot.answer_callback_query(call.id)
 
-if name == "main":
+if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
