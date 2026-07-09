@@ -18,7 +18,8 @@ def run_web_server():
     server.serve_forever()
 
 # --- ДАНІ ВАШЕГО БОТА І СЕРВЕРА ---
-TOKEN = "8653250290:AAEy7Td_tpokoI00HuwRMYWX5jpvuqoTVbI"
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
