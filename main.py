@@ -18,7 +18,7 @@ def run_web_server():
     server.serve_forever()
 
 # --- ДАНІ ВАШЕГО БОТА І СЕРВЕРА ---
-TOKEN = "8653250290:AAHfh7P94TajZXwVbLzPKKJywahtoKdszno"
+TOKEN = "8653250290:AAH_3Mz8qBCoOWXdLj0npjTYU0BAmDTBlww"
 SERVER_IP = "91.211.118.90"
 SERVER_PORT = 27036
 
