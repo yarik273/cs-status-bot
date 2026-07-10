@@ -124,11 +124,11 @@ def get_cs_status_full():
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
-        text = f"⚙️ *Моніторинг {server_name}*\n\n"
-        text += f"🖥️ *{server_name}*\n"
-        text += f"🌐 *IP*: {SERVER_IP}:{SERVER_PORT}\n"
-        text += f"🗺️ *Карта*: {current_map}\n"
-        text += f"👥 *Гравці*: {players_count}/{max_players}\n\n"
+        text = f"⚙️ Моніторинг {server_name}\n\n"
+        text += f"🖥️ {server_name}\n"
+        text += f"🌐 IP: {SERVER_IP}:{SERVER_PORT}\n"
+        text += f"🗺️ Карта: {current_map}\n"
+        text += f"👥 Гравці: {players_count}/{max_players}\n\n"
         
         if players_count > 0 and players:
             for idx, p in enumerate(players, 1):
