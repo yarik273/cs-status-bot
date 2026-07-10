@@ -168,7 +168,6 @@ def send_cs_status(message):
                 chat_id=message.chat.id, 
                 photo=MAIN_BANNER_ID, 
                 caption=data["text"], 
-                parse_mode="Markdown",
                 message_thread_id=thread_id
             )
             return
@@ -178,7 +177,6 @@ def send_cs_status(message):
     bot.send_message(
         chat_id=message.chat.id, 
         text=data["text"], 
-        parse_mode="Markdown",
         message_thread_id=thread_id,
         reply_to_message_id=message.message_id
     )
