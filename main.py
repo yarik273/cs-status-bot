@@ -11,6 +11,9 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Bot is running successfully!")
+    def do_HEAD(self):
+            self.send_response(200)
+            self.end_headers()   
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
