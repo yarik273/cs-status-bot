@@ -2,25 +2,26 @@ import os
 import socket
 import struct
 import threading
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Мікро-веб-сервер для проходження перевірки Render
+# Мікро-веб-сервер для проходження перевірки працездатності (Health Check)
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Bot is running successfully!")
     def do_HEAD(self):
-            self.send_response(200)
-            self.end_headers()   
+        self.send_response(200)
+        self.end_headers()   
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШЕГО БОТА І СЕРВЕРА ---
+# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 SERVER_IP = "91.211.118.90"
@@ -66,7 +67,7 @@ def get_cs_players(client, ip, port):
         if len(payload) == 0:
             return []
             
-        num_players = int(payload[0])  # ПОВЕРНЕНО [0]
+        num_players = int(payload[0])
         payload = payload[1:]
         players_list = []
         
@@ -83,7 +84,7 @@ def get_cs_players(client, ip, port):
             
             if len(payload) < 8:
                 break
-            frags = struct.unpack('<i', payload[:4])[0]  # ПОВЕРНЕНО [0]
+            frags = struct.unpack('<i', payload[:4])[0]
             payload = payload[8:]
             
             if name:
@@ -95,10 +96,11 @@ def get_cs_players(client, ip, port):
         return []
 
 def get_cs_status_full():
-    """Збирає статус сервера у вигляді чистого тексту"""
+    """Збирає статус сервера з гарантованим закриттям сокету та оптимізованим таймаутом"""
+    client = None
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        client.settimeout(2.5)
+        client.settimeout(6.0)  # Збільшено таймаут для стабільності зв'язку через Railway
         
         info_request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
         client.sendto(info_request, (SERVER_IP, SERVER_PORT))
@@ -121,9 +123,10 @@ def get_cs_status_full():
         for _ in range(2):
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
-            # Читання кількості гравців
-        players_count = int(payload[2]) if len(payload) >= 3 else 0  # ПОВЕРНЕНО [2]
-        max_players = int(payload[3]) if len(payload) >= 4 else 0   # ПОВЕРНЕНО [3]
+            
+        # Читання кількості гравців
+        players_count = int(payload[2]) if len(payload) >= 3 else 0
+        max_players = int(payload[3]) if len(payload) >= 4 else 0
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
@@ -152,17 +155,18 @@ def get_cs_status_full():
         return {"status": "online", "text": text}
         
     except socket.timeout:
-        return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} зараз недоступний або вимкнений."}
+        return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} не відповідає. Можливо, вихідний IP платформи Railway тимчасово заблоковано захистом ігрового сервера."}
     except Exception as e:
-        return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
+        return {"status": "error", "text": f"⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером. ({str(e)})"}
+    finally:
+        if client:
+            client.close()  # Примусово звільняємо UDP-порт в системі Railway після кожного запиту
 
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     data = get_cs_status_full()
     
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
-    
-    # Визначаємо ID гілки (топіка), де викликали команду
     thread_id = message.message_thread_id
     
     if data.get("status") == "online":
@@ -188,3 +192,4 @@ if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
+    
