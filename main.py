@@ -31,14 +31,9 @@ bot.remove_webhook()
 def get_cs_status_via_api():
     """Отримує статус сервера через універсальне Valve Info API (обхід будь-яких банів на Railway)"""
     try:
-        # Використовуємо відкрите стабільне API моніторингу ігрових серверів
-        url = f"https://gamecms.org{SERVER_IP}&port={SERVER_PORT}"
+        # Абсолютно пряме посилання без використання внутрішніх змінних Python
+        url = "https://gamecms.org"
         response = requests.get(url, timeout=8.0)
-        
-        if response.status_code != 200:
-            # Альтернативне джерело, якщо перше API тимчасово недоступне
-            url = f"https://vserver.space{SERVER_IP}/{SERVER_PORT}"
-            response = requests.get(url, timeout=8.0)
             
         if response.status_code != 200:
             return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nІгровий сервер зараз недоступний або захист блокує запити інтернет-моніторингів."}
@@ -46,7 +41,7 @@ def get_cs_status_via_api():
         data = response.json()
         
         # Перевірка чи успішно API отримало дані з нашого сервера
-        if not data or not data.get("status") or data.get("status") == "offline":
+        if not data or data.get("status") == "offline":
             return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} не відповідає. Можливо, він вимкнений."}
             
         # Забираємо дані і очищаємо назву від зайвих символів на початку
@@ -61,8 +56,8 @@ def get_cs_status_via_api():
         text += f"🗺️ Карта: {current_map}\n"
         text += f"👥 Гравці: {players_count}/{max_players}\n\n"
         
-        # Отримуємо список гравців через проксі-API
-        players_url = f"https://gamecms.org{SERVER_IP}&port={SERVER_PORT}"
+        # Пряме посилання на список гравців
+        players_url = "https://gamecms.org"
         players_resp = requests.get(players_url, timeout=6.0)
         
         if players_resp.status_code == 200:
