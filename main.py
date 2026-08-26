@@ -29,30 +29,26 @@ bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
 def get_cs_status_via_api():
-    """Отримує 100% реальний онлайн через актуальний шлюз та імітацію браузера"""
+    """Отримує реальний онлайн через пряму IP-адресу API в обхід зламаного DNS на Railway"""
     try:
-        # Нове робоче API, яке стабільно бачить сервер VOLYNSKIY_PUBLIC
-        url = "https://vserver.space"
+        # Замість vserver.space використовуємо пряму IP-адресу сервера моніторингу: 92.53.65.250
+        # Передаємо заголовок Host, щоб веб-сервер моніторингу зрозумів запит
+        url = "https://92.53.65"
         
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "Host": "vserver.space"  # Обов'язково для роботи через прямий IP
         }
         
-        response = requests.get(url, headers=headers, timeout=7.0)
-        
-        # Якщо головне API збоїть, миттєво використовуємо альтернативне геймерське API
-        if response.status_code != 200:
-            url = f"https://gamecms.org{SERVER_IP}&port={SERVER_PORT}"
-            response = requests.get(url, headers=headers, timeout=7.0)
-            
+        # Вимикаємо перевірку SSL (verify=False), оскільки сертифікат випущено на домен, а ми йдемо по IP
+        response = requests.get(url, headers=headers, timeout=8.0, verify=False)
         data = response.json()
         
-        # Перевіряємо, чи повернулися адекватные дані
         if not data or data.get("status") == "offline" or data.get("online") is False:
             return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} зараз недоступний."}
             
-        # Парсимо дані (враховуємо різні формати полів обох API)
+        # Зчитуємо чисті дані сервера
         server_name = data.get("hostname", data.get("name", "VOLYNSKIY_PUBLIC")).lstrip('0Оo○◦ \t')
         current_map = data.get("mapname", data.get("map", "de_dust2"))
         players_count = int(data.get("players", data.get("players_online", 0)))
@@ -72,10 +68,10 @@ def get_cs_status_via_api():
         return {"status": "online", "text": text}
         
     except Exception as e:
-        # Текстова заглушка, ТІЛЬКИ якщо інтернет повністю пропав на Railway
+        # Якщо навіть прямий IP видасть збій, виводимо помилку для точного аналізу
         return {
             "status": "online", 
-            "text": f"⚙️ Моніторинг VOLYNSKIY_PUBLIC\n\n🖥️ VOLYNSKIY_PUBLIC [UA]\n🌐 IP: {SERVER_IP}:{SERVER_PORT}\n🗺️ Карта: Оновлюється...\n👥 Гравці: Сервер доступний 👍\n\n🎮 _Заходьте грати прямо зараз!_\n_(Помилка зв'язку: {str(e)})_"
+            "text": f"⚙️ Моніторинг VOLYNSKIY_PUBLIC\n\n🖥️ VOLYNSKIY_PUBLIC [UA]\n🌐 IP: {SERVER_IP}:{SERVER_PORT}\n🗺️ Карта: Не вдалося оновити\n👥 Гравці: Помилка отримання даних ❌\n\n⚠️ Помилка: {str(e)}"
         }
 
 @bot.message_handler(commands=['info', 'server'])
@@ -90,7 +86,11 @@ def send_cs_status(message):
         bot.send_message(chat_id=message.chat.id, text=data["text"], message_thread_id=thread_id, reply_to_message_id=message.message_id)
 
 if __name__ == "__main__":
+    # Тимчасово вимикаємо попередження від urllib3 про вимкнений verify=False, щоб не засмічувати логи
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    
     threading.Thread(target=run_web_server, daemon=True).start()
-    print("Telegram Live-API Bot started successfully...")
+    print("Telegram IP-Direct Bot started successfully...")
     bot.polling(none_stop=True)
     
