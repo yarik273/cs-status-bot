@@ -28,27 +28,63 @@ SERVER_PORT = "27036"
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
-def get_cs_status_via_api():
-    """Отримує статус сервера через універсальне Valve Info API (обхід будь-яких банів на Railway)"""
+def fetch_data_with_fallback():
+    """Спробує отримати дані сервера з трьох різних незалежних API джерел"""
+    # Джерело 1: GameCMS API
     try:
-        # Абсолютно пряме посилання без використання внутрішніх змінних Python
         url = "https://gamecms.org"
-        response = requests.get(url, timeout=8.0)
-            
-        if response.status_code != 200:
-            return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nІгровий сервер зараз недоступний або захист блокує запити інтернет-моніторингів."}
-            
-        data = response.json()
+        res = requests.get(url, timeout=5.0)
+        if res.status_code == 200 and res.json().get("status") != "offline":
+            return "gamecms", res.json()
+    except Exception:
+        pass
+
+    # Джерело 2: VServer Space API
+    try:
+        url = "https://vserver.space"
+        res = requests.get(url, timeout=5.0)
+        if res.status_code == 200 and res.json().get("online") is True:
+            return "vserver", res.json()
+    except Exception:
+        pass
+
+    # Джерело 3: Резервне геймерське API моніторингу GS4u через пряме посилання
+    try:
+        url = "https://gs4u.net"
+        res = requests.get(url, timeout=5.0)
+        if res.status_code == 200 and res.json().get("online") != 0:
+            return "gs4u", res.json()
+    except Exception:
+        pass
+
+    return None, None
+
+def get_cs_status_via_api():
+    """Аналізує отримані дані від успішного джерела та формує гарний текст"""
+    source_name, data = fetch_data_with_fallback()
+    
+    if not data:
+        return {"status": "offline", "text": "🔴 *Статус сервера*: OFFLINE ❌\n\nСервер не відповідає на запити жодного з трьох незалежних моніторингів. Можливо, на ігровому хостингу відбуваються технічні роботи."}
         
-        # Перевірка чи успішно API отримало дані з нашого сервера
-        if not data or data.get("status") == "offline":
-            return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} не відповідає. Можливо, він вимкнений."}
+    try:
+        # Уніфікація даних під різні формати відповідей API
+        if source_name == "gamecms":
+            server_name = data.get("name", "CS 1.6 Server")
+            current_map = data.get("map", "unknown")
+            players_count = int(data.get("players", 0))
+            max_players = int(data.get("max_players", 32))
+        elif source_name == "vserver":
+            server_name = data.get("hostname", "CS 1.6 Server")
+            current_map = data.get("mapname", "unknown")
+            players_count = int(data.get("players", 0))
+            max_players = int(data.get("maxplayers", 32))
+        else: # gs4u
+            server_name = data.get("name", "CS 1.6 Server")
+            current_map = data.get("map", "unknown")
+            players_count = int(data.get("players", 0))
+            max_players = int(data.get("maxplayers", 32))
             
-        # Забираємо дані і очищаємо назву від зайвих символів на початку
-        server_name = data.get("name", "CS 1.6 Server").lstrip('0Оo○◦ \t')
-        current_map = data.get("map", "unknown")
-        players_count = int(data.get("players", 0))
-        max_players = int(data.get("max_players", 32))
+        server_name = server_name.lstrip('0Оo○◦ \t')
         
         text = f"⚙️ Моніторинг {server_name}\n\n"
         text += f"🖥️ {server_name}\n"
@@ -56,39 +92,39 @@ def get_cs_status_via_api():
         text += f"🗺️ Карта: {current_map}\n"
         text += f"👥 Гравці: {players_count}/{max_players}\n\n"
         
-        # Пряме посилання на список гравців
-        players_url = "https://gamecms.org"
-        players_resp = requests.get(players_url, timeout=6.0)
-        
-        if players_resp.status_code == 200:
-            players_data = players_resp.json().get("players", [])
-            # Сортування за фрагами (score) від більшого до меншого
-            players_data.sort(key=lambda x: int(x.get("score", 0)), reverse=True)
-            
-            if players_count > 0 and players_data:
-                for idx, p in enumerate(players_data[:20], 1): # Топ-20 активних гравців
-                    if idx == 1: emoji = "🥇"
-                    elif idx == 2: emoji = "🥈"
-                    elif idx == 3: emoji = "🥉"
-                    else: emoji = "🎮"
-                    name = p.get("name", "Гравець").strip()
-                    if not name: name = "Підключення..."
-                    frags = p.get("score", 0)
-                    text += f"{emoji} {name} — {frags} вбивств\n"
-            elif players_count > 0:
-                text += "⏳ _Гравці підключаються до карти..._\n"
-            else:
-                text += "💤 _На сервері немає гравців._\n"
-        else:
-            if players_count > 0:
-                text += "🎮 _На сервері є гравці, але детальний список оновлюється..._\n"
-            else:
-                text += "💤 _На сервері немає гравців._\n"
+        # Спроба отримати список гравців (лише для першого API, бо інші його не завжди віддають)
+        if source_name == "gamecms" and players_count > 0:
+            try:
+                players_url = "https://gamecms.org"
+                players_resp = requests.get(players_url, timeout=4.0)
+                if players_resp.status_code == 200:
+                    players_data = players_resp.json().get("players", [])
+                    players_data.sort(key=lambda x: int(x.get("score", 0)), reverse=True)
+                    
+                    if players_data:
+                        for idx, p in enumerate(players_data[:20], 1):
+                            if idx == 1: emoji = "🥇"
+                            elif idx == 2: emoji = "🥈"
+                            elif idx == 3: emoji = "🥉"
+                            else: emoji = "🎮"
+                            name = p.get("name", "Гравець").strip()
+                            if not name: name = "Підключення..."
+                            frags = p.get("score", 0)
+                            text += f"{emoji} {name} — {frags} вбивств\n"
+                        return {"status": "online", "text": text}
+            except Exception:
+                pass
                 
+        # Стандартні заглушки для онлайну, якщо список гравців недоступний
+        if players_count > 0:
+            text += "🎮 _На сервері є гравці. Заходьте грати!_\n"
+        else:
+            text += "💤 _На сервері немає гравців._\n"
+            
         return {"status": "online", "text": text}
         
     except Exception as e:
-        return {"status": "error", "text": f"⚠️ *Помилка моніторингу*: Сервер не зміг обробити дані. ({str(e)})"}
+        return {"status": "error", "text": f"⚠️ *Помилка обробки*: Не вдалося розпарсити відповідь від {source_name}. ({str(e)})"}
 
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
@@ -118,6 +154,6 @@ def send_cs_status(message):
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
-    print("Telegram Valve-API bot started successfully...")
+    print("Telegram Multi-API bot started successfully...")
     bot.polling(none_stop=True)
     
