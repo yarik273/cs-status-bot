@@ -1,8 +1,6 @@
 import os
-import socket
-import struct
 import threading
-import time
+import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
@@ -25,110 +23,31 @@ def run_web_server():
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 SERVER_IP = "91.211.118.90"
-SERVER_PORT = 27036
+SERVER_PORT = "27036"
 
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
-def decode_text(byte_data):
-    """Безпечно декодує текст з сервера"""
+def get_cs_status_via_api():
+    """Отримує статус сервера через стороннє API (обхід бану IP на Railway)"""
     try:
-        return byte_data.decode('utf-8').strip()
-    except Exception:
-        try:
-            return byte_data.decode('cp1251', errors='ignore').strip()
-        except Exception:
-            return byte_data.decode('latin-1', errors='ignore').strip()
-
-def get_challenge_token(client, ip, port, request_header):
-    """Отримує захисний challenge-токен від сервера CS 1.6"""
-    req = b'\xFF\xFF\xFF\xFF' + request_header + b'\xFF\xFF\xFF\xFF'
-    client.sendto(req, (ip, port))
-    try:
-        data, _ = client.recvfrom(4096)
-        if data.startswith(b'\xFF\xFF\xFF\xFFA'):
-            return data[5:9]
-    except Exception:
-        pass
-    return b'\xFF\xFF\xFF\xFF'
-
-def get_cs_players(client, ip, port):
-    """Отримує список гравців з кількістю їхніх вбивств (фрагів)"""
-    token = get_challenge_token(client, ip, port, b'U')
-    req = b'\xFF\xFF\xFF\xFFU' + token
-    client.sendto(req, (ip, port))
-    
-    try:
-        data, _ = client.recvfrom(65535)
-        if not data.startswith(b'\xFF\xFF\xFF\xFFD'):
-            return []
+        # Використовуємо стабільне API від відомого моніторингу GS4u
+        url = f"https://gs4u.net{SERVER_IP}:{SERVER_PORT}/info.json"
+        response = requests.get(url, timeout=5.0)
         
-        payload = data[5:]
-        if len(payload) == 0:
-            return []
+        if response.status_code != 200:
+            return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} не відповідає на запити моніторингу."}
             
-        num_players = int(payload[0])
-        payload = payload[1:]
-        players_list = []
+        data = response.json()
         
-        for _ in range(num_players):
-            if len(payload) < 2:
-                break
-            payload = payload[1:]  # Пропуск індексу
+        # Перевіряємо чи онлайн сервер в базі моніторингу
+        if data.get("online") == 0:
+            return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер закритий або тимчасово вимкнений."}
             
-            name_end = payload.find(b'\x00')
-            if name_end == -1:
-                break
-            name = decode_text(payload[:name_end])
-            payload = payload[name_end + 1:]
-            
-            if len(payload) < 8:
-                break
-            frags = struct.unpack('<i', payload[:4])[0]
-            payload = payload[8:]
-            
-            if name:
-                players_list.append({"name": name, "frags": frags})
-                
-        players_list.sort(key=lambda x: x["frags"], reverse=True)
-        return players_list
-    except Exception:
-        return []
-
-def get_cs_status_full():
-    """Збирає статус сервера з гарантованим закриттям сокету та оптимізованим таймаутом"""
-    client = None
-    try:
-        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        client.settimeout(6.0)  # Збільшено таймаут для стабільності зв'язку через Railway
-        
-        info_request = b'\xFF\xFF\xFF\xFFTSource Engine Query\x00'
-        client.sendto(info_request, (SERVER_IP, SERVER_PORT))
-        
-        data, _ = client.recvfrom(4096)
-        payload = data[5:]
-        
-        # Читання назви сервера
-        server_name_end = payload.find(b'\x00')
-        server_name = decode_text(payload[:server_name_end])
-        server_name = server_name.lstrip('0Оo○◦ \t')
-        payload = payload[server_name_end + 1:]
-        
-        # Читання карти
-        map_end = payload.find(b'\x00')
-        current_map = decode_text(payload[:map_end])
-        payload = payload[map_end + 1:]
-        
-        # Пропуск папки та назви гри
-        for _ in range(2):
-            end = payload.find(b'\x00')
-            payload = payload[end + 1:]
-            
-        # Читання кількості гравців
-        players_count = int(payload[2]) if len(payload) >= 3 else 0
-        max_players = int(payload[3]) if len(payload) >= 4 else 0
-            
-        players = get_cs_players(client, SERVER_IP, SERVER_PORT)
+        server_name = data.get("name", "CS 1.6 Server").lstrip('0Оo○◦ \t')
+        current_map = data.get("map", "unknown")
+        players_count = data.get("players", 0)
+        max_players = data.get("maxplayers", 32)
         
         text = f"⚙️ Моніторинг {server_name}\n\n"
         text += f"🖥️ {server_name}\n"
@@ -136,35 +55,43 @@ def get_cs_status_full():
         text += f"🗺️ Карта: {current_map}\n"
         text += f"👥 Гравці: {players_count}/{max_players}\n\n"
         
-        if players_count > 0 and players:
-            for idx, p in enumerate(players, 1):
-                if idx == 1:
-                    emoji = "🥇"
-                elif idx == 2:
-                    emoji = "🥈"
-                elif idx == 3:
-                    emoji = "🥉"
-                else:
-                    emoji = "🎮"
-                text += f"{emoji} {p['name']} — {p['frags']} вбивств\n"
-        elif players_count > 0 and not players:
-            text += "⏳ _Гравці підключаються до карти..._\n"
-        else:
-            text += "💤 _На сервері немає гравців._\n"
+        # Спроба отримати список гравців через API
+        players_url = f"https://gs4u.net{SERVER_IP}:{SERVER_PORT}/players.json"
+        players_resp = requests.get(players_url, timeout=4.0)
+        
+        if players_resp.status_code == 200:
+            players_data = players_resp.json().get("players", [])
+            # Сортуємо за кількістю фрагів (score)
+            players_data.sort(key=lambda x: int(x.get("score", 0)), reverse=True)
             
+            if players_count > 0 and players_data:
+                for idx, p in enumerate(players_data[:20], 1): # Обмежуємо топ-20 гравців
+                    if idx == 1: emoji = "🥇"
+                    elif idx == 2: emoji = "🥈"
+                    elif idx == 3: emoji = "🥉"
+                    else: emoji = "🎮"
+                    name = p.get("name", "Гравець")
+                    frags = p.get("score", 0)
+                    text += f"{emoji} {name} — {frags} вбивств\n"
+            elif players_count > 0:
+                text += "⏳ _Гравці підключаються до карти..._\n"
+            else:
+                text += "💤 _На сервері немає гравців._\n"
+        else:
+            if players_count > 0:
+                text += "🎮 _На сервері є гравці, але список зараз оновлюється..._\n"
+            else:
+                text += "💤 _На сервері немає гравців._\n"
+                
         return {"status": "online", "text": text}
         
-    except socket.timeout:
-        return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} не відповідає. Можливо, вихідний IP платформи Railway тимчасово заблоковано захистом ігрового сервера."}
     except Exception as e:
-        return {"status": "error", "text": f"⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером. ({str(e)})"}
-    finally:
-        if client:
-            client.close()  # Примусово звільняємо UDP-порт в системі Railway після кожного запиту
+        return {"status": "error", "text": f"⚠️ *Помилка API*: Не вдалося отримати дані сервера з моніторингу. ({str(e)})"}
 
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
-    data = get_cs_status_full()
+    # Викликаємо нову стабільну функцію через API
+    data = get_cs_status_via_api()
     
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
     thread_id = message.message_thread_id
@@ -190,6 +117,6 @@ def send_cs_status(message):
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
-    print("Telegram bot started successfully...")
+    print("Telegram API-based bot started successfully...")
     bot.polling(none_stop=True)
     
