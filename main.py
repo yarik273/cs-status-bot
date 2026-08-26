@@ -31,9 +31,9 @@ bot.remove_webhook()
 def get_cs_status_via_api():
     """Отримує статус сервера через стороннє API (обхід бану IP на Railway)"""
     try:
-        # ВИПРАВЛЕНО: Правильний формат URL для API GS4u
-        url = f"https://gs4u.net{SERVER_IP}-{SERVER_PORT}/info.json"
-        response = requests.get(url, timeout=6.0)
+        # Абсолютно чисте посилання без автоматичного склеювання рядків
+        url = "https://gs4u.net"
+        response = requests.get(url, timeout=7.0)
         
         if response.status_code != 200:
             return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} не відповідає на запити моніторингу."}
@@ -55,8 +55,8 @@ def get_cs_status_via_api():
         text += f"🗺️ Карта: {current_map}\n"
         text += f"👥 Гравці: {players_count}/{max_players}\n\n"
         
-        # Спроба отримати список гравців через API
-        players_url = f"https://gs4u.net{SERVER_IP}-{SERVER_PORT}/players.json"
+        # Пряме чисте посилання на список гравців
+        players_url = "https://gs4u.net"
         players_resp = requests.get(players_url, timeout=5.0)
         
         if players_resp.status_code == 200:
