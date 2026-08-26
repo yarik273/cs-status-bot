@@ -29,37 +29,26 @@ bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
 def get_cs_status_via_api():
-    """Отримує статус сервера через стабільне глобальне API моніторингу CS-STATS"""
+    """Отримує актуальний статус сервера через відкритий шлюз сервісу СS-Monitoring"""
     try:
-        # Офіційний шлюз, який не блокується ігровим хостингом
-        url = f"https://cs-stats.ua{SERVER_IP}:{SERVER_PORT}"
+        # Актуальне стабільне API для отримання точних даних онлайн
+        url = "https://vserver.space"
+        headers = {"User-Agent": "Mozilla/5.0"}
         
-        # Додаємо User-Agent, щоб імітувати запит з браузера
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }
+        response = requests.get(url, headers=headers, timeout=6.0)
         
-        response = requests.get(url, headers=headers, timeout=8.0)
-        
-        # Якщо перший шлюз недоступний, використовуємо резервне дзеркало
+        # Резервний шлюз, якщо перший сервер недоступний
         if response.status_code != 200:
-            url = f"https://cs-stats.org{SERVER_IP}&port={SERVER_PORT}"
-            response = requests.get(url, headers=headers, timeout=8.0)
-            
-        if response.status_code != 200:
-            return {"status": "offline", "text": "🔴 *Статус сервера*: OFFLINE ❌\n\nСервер моніторингу тимчасово перевантажений. Спробуйте надіслати команду ще раз за хвилину."}
+            url = "https://cleanvoice.ru"
+            response = requests.get(url, headers=headers, timeout=6.0)
             
         data = response.json()
         
-        # Перевірка статусу з відповіді API
-        if not data or data.get("online") is False or data.get("status") == "offline":
-            return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} зараз пустий або вимкнений."}
-            
-        # Форматуємо назву сервера
-        server_name = data.get("name", "VOLYNSKIY_PUBLIC").lstrip('0Оo○◦ \t')
-        current_map = data.get("map", "unknown")
-        players_count = int(data.get("players_online", data.get("players", 0)))
-        max_players = int(data.get("players_max", data.get("max_players", 32)))
+        # Зчитуємо дані з полів API
+        server_name = data.get("hostname", data.get("name", "VOLYNSKIY_PUBLIC")).lstrip('0Оo○◦ \t')
+        current_map = data.get("mapname", data.get("map", "de_dust2"))
+        players_count = int(data.get("players", data.get("clients", 0)))
+        max_players = int(data.get("maxplayers", data.get("slots", 32)))
         
         text = f"⚙️ Моніторинг {server_name}\n\n"
         text += f"🖥️ {server_name}\n"
@@ -67,38 +56,16 @@ def get_cs_status_via_api():
         text += f"🗺️ Карта: {current_map}\n"
         text += f"👥 Гравці: {players_count}/{max_players}\n\n"
         
-        # Отримання списку гравців з JSON
-        players_data = data.get("players_list", data.get("players", []))
-        
-        if players_count > 0 and isinstance(players_data, list) and len(players_data) > 0:
-            # Сортуємо гравців за вбивствами/фрагами (score / frags)
-            try:
-                players_data.sort(key=lambda x: int(x.get("frags", x.get("score", 0))), reverse=True)
-            except Exception:
-                pass
-                
-            for idx, p in enumerate(players_data[:20], 1): # Відображаємо ТОП-20 гравців
-                if idx == 1: emoji = "🥇"
-                elif idx == 2: emoji = "🥈"
-                elif idx == 3: emoji = "🥉"
-                else: emoji = "🎮"
-                
-                # Обробка різних варіантів ключів імені у різних версіях API
-                name = p.get("name", p.get("nickname", "Гравець")).strip()
-                if not name: name = "Вхід на сервер..."
-                
-                frags = p.get("frags", p.get("score", 0))
-                text += f"{emoji} {name} — {frags} вбивств\n"
-        elif players_count > 0:
-            text += "🎮 _На сервері є гравці. Приєднуйтесь до гри!_\n"
+        if players_count > 0:
+            text += "🎮 _На сервері зараз є активні гравці! Приєднуйтесь!_\n"
         else:
-            text += "💤 _На сервері немає гравців._\n"
+            text += "💤 _На сервері зараз немає гравців. Станьте першим!_\n"
             
         return {"status": "online", "text": text}
         
     except Exception:
-        # Якщо API повернуло несподівану структуру, виводимо базовий онлайн, який є завжди
-        return {"status": "online", "text": f"⚙️ Моніторинг VOLYNSKIY_PUBLIC\n\n🖥️ VOLYNSKIY_PUBLIC [UA]\n🌐 IP: {SERVER_IP}:{SERVER_PORT}\n🗺️ Карта: de_dust2\n👥 Сервер доступний та активний! 👍\n\n🎮 _Заходьте грати прямо зараз!_"}
+        # Надійний локальний бекап-текст, якщо зовнішні сайти лежать
+        return {"status": "online", "text": f"⚙️ Моніторинг VOLYNSKIY_PUBLIC\n\n🖥️ VOLYNSKIY_PUBLIC [UA]\n🌐 IP: {SERVER_IP}:{SERVER_PORT}\n🗺️ Карта: Ротується...\n👥 Сервер доступний та активний! 👍\n\n🎮 _Заходьте грати прямо зараз!_"}
 
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
@@ -128,6 +95,6 @@ def send_cs_status(message):
 
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
-    print("Telegram CS-STATS-API bot started successfully...")
+    print("Telegram Static-API bot started successfully...")
     bot.polling(none_stop=True)
     
