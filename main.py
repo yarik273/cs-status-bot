@@ -31,9 +31,9 @@ bot.remove_webhook()
 def get_cs_status_via_api():
     """Отримує статус сервера через стороннє API (обхід бану IP на Railway)"""
     try:
-        # Використовуємо стабільне API від відомого моніторингу GS4u
-        url = f"https://gs4u.net{SERVER_IP}:{SERVER_PORT}/info.json"
-        response = requests.get(url, timeout=5.0)
+        # ВИПРАВЛЕНО: Правильний формат URL для API GS4u
+        url = f"https://gs4u.net{SERVER_IP}-{SERVER_PORT}/info.json"
+        response = requests.get(url, timeout=6.0)
         
         if response.status_code != 200:
             return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} не відповідає на запити моніторингу."}
@@ -56,8 +56,8 @@ def get_cs_status_via_api():
         text += f"👥 Гравці: {players_count}/{max_players}\n\n"
         
         # Спроба отримати список гравців через API
-        players_url = f"https://gs4u.net{SERVER_IP}:{SERVER_PORT}/players.json"
-        players_resp = requests.get(players_url, timeout=4.0)
+        players_url = f"https://gs4u.net{SERVER_IP}-{SERVER_PORT}/players.json"
+        players_resp = requests.get(players_url, timeout=5.0)
         
         if players_resp.status_code == 200:
             players_data = players_resp.json().get("players", [])
@@ -86,11 +86,10 @@ def get_cs_status_via_api():
         return {"status": "online", "text": text}
         
     except Exception as e:
-        return {"status": "error", "text": f"⚠️ *Помилка API*: Не вдалося отримати дані сервера з моніторингу. ({str(e)})"}
+        return {"status": "error", "text": f"⚠️ *Помилка API*: Не вдалося отримати дані з моніторингу. ({str(e)})"}
 
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
-    # Викликаємо нову стабільну функцію через API
     data = get_cs_status_via_api()
     
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
