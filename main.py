@@ -91,9 +91,9 @@ def get_cs_players(client, ip, port):
                 
         players_list.sort(key=lambda x: x["frags"], reverse=True)
         return players_list
-   except Exception:
+ except Exception:
         return []
-        def get_cs_status_full():
+    def get_cs_status_full():
     """Збирає статус сервера у вигляді чистого тексту"""
         try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
