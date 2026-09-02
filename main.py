@@ -5,22 +5,22 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Мікро-веб-сервер для проходження перевірки Render / Railway
+# Мікро-веб-сервер для проходження перевірки Render
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Bot is running successfully!")
     def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()   
+            self.send_response(200)
+            self.end_headers()   
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
+# --- ДАНІ ВАШЕГО БОТА І СЕРВЕРА ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 SERVER_IP = "91.211.118.90"
@@ -117,12 +117,11 @@ def get_cs_status_full():
         current_map = decode_text(payload[:map_end])
         payload = payload[map_end + 1:]
         
-        # Пропуск папки та назви гри (ВИПРАВЛЕНО ВІДСТУПИ)
-        for _ in range(2):
+        # Пропуск папки та назви гри
+[26.08.2026 9:27] Trockenbau und Bodenlegen 75175 Pforzheim: for _ in range(2):
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
-            
-        # Читання кількості гравців
+            # Читання кількості гравців
         players_count = int(payload[2]) if len(payload) >= 3 else 0  # ПОВЕРНЕНО [2]
         max_players = int(payload[3]) if len(payload) >= 4 else 0   # ПОВЕРНЕНО [3]
             
@@ -154,13 +153,16 @@ def get_cs_status_full():
         
     except socket.timeout:
         return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} зараз недоступний або вимкнений."}
-    except Exception:
+    except Exception as e:
         return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     data = get_cs_status_full()
+    
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
+    
+    # Визначаємо ID гілки (топіка), де викликали команду
     thread_id = message.message_thread_id
     
     if data.get("status") == "online":
@@ -182,9 +184,7 @@ def send_cs_status(message):
         reply_to_message_id=message.message_id
     )
 
-# ВИПРАВЛЕНО ТОЧКУ ВХОДУ СИНТАКСИЧНО
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
-    
