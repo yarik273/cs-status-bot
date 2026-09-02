@@ -15,7 +15,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()   
 
-def run_web_server():
+    def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
@@ -29,7 +29,7 @@ SERVER_PORT = 27036
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
-def decode_text(byte_data):
+    def decode_text(byte_data):
     """Безпечно декодує текст з сервера"""
     try:
         return byte_data.decode('utf-8').strip()
@@ -39,7 +39,7 @@ def decode_text(byte_data):
         except Exception:
             return byte_data.decode('latin-1', errors='ignore').strip()
 
-def get_challenge_token(client, ip, port, request_header):
+    def get_challenge_token(client, ip, port, request_header):
     """Отримує захисний challenge-токен від сервера CS 1.6"""
     req = b'\xFF\xFF\xFF\xFF' + request_header + b'\xFF\xFF\xFF\xFF'
     client.sendto(req, (ip, port))
@@ -51,7 +51,7 @@ def get_challenge_token(client, ip, port, request_header):
         pass
     return b'\xFF\xFF\xFF\xFF'
 
-def get_cs_players(client, ip, port):
+    def get_cs_players(client, ip, port):
     """Отримує список гравців з кількістю їхніх вбивств (фрагів)"""
     token = get_challenge_token(client, ip, port, b'U')
     req = b'\xFF\xFF\xFF\xFFU' + token
@@ -156,8 +156,8 @@ def get_cs_players(client, ip, port):
     except Exception:
         return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
-@bot.message_handler(commands=['info', 'server'])
-def send_cs_status(message):
+    @bot.message_handler(commands=['info', 'server'])
+    def send_cs_status(message):
     data = get_cs_status_full()
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
     thread_id = message.message_thread_id
