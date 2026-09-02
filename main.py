@@ -29,7 +29,7 @@ SERVER_PORT = 27036
 bot = telebot.TeleBot(TOKEN)
 bot.remove_webhook()
 
-    def decode_text(byte_data):
+def decode_text(byte_data):
     """Безпечно декодує текст з сервера"""
     try:
         return byte_data.decode('utf-8').strip()
@@ -39,7 +39,7 @@ bot.remove_webhook()
         except Exception:
             return byte_data.decode('latin-1', errors='ignore').strip()
 
-    def get_challenge_token(client, ip, port, request_header):
+def get_challenge_token(client, ip, port, request_header):
     """Отримує захисний challenge-токен від сервера CS 1.6"""
     req = b'\xFF\xFF\xFF\xFF' + request_header + b'\xFF\xFF\xFF\xFF'
     client.sendto(req, (ip, port))
@@ -51,7 +51,7 @@ bot.remove_webhook()
         pass
     return b'\xFF\xFF\xFF\xFF'
 
-    def get_cs_players(client, ip, port):
+def get_cs_players(client, ip, port):
     """Отримує список гравців з кількістю їхніх вбивств (фрагів)"""
     token = get_challenge_token(client, ip, port, b'U')
     req = b'\xFF\xFF\xFF\xFFU' + token
@@ -91,7 +91,7 @@ bot.remove_webhook()
                 
         players_list.sort(key=lambda x: x["frags"], reverse=True)
         return players_list
-    except Exception:
+ except Exception:
         return []
         def get_cs_status_full():
     """Збирає статус сервера у вигляді чистого тексту"""
@@ -157,7 +157,7 @@ bot.remove_webhook()
         return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
     @bot.message_handler(commands=['info', 'server'])
-    def send_cs_status(message):
+def send_cs_status(message):
     data = get_cs_status_full()
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
     thread_id = message.message_thread_id
