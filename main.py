@@ -187,7 +187,7 @@ if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
-[10.07.2026 21:16] Trockenbau und Bodenlegen 75175 Pforzheim: @bot.message_handler(commands=['info', 'server'])
+    @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     data = get_cs_status_full()
     thread_id = message.message_thread_id
