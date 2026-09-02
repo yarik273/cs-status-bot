@@ -5,19 +5,22 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 
-# Мікро-веб-сервер для проходження перевірки Render
+# Мікро-веб-сервер для проходження перевірки Render / Railway
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Bot is running successfully!")
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()   
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- ДАНІ ВАШЕГО БОТА І СЕРВЕРА ---
+# --- ДАНІ ВАШОГО БОТА І СЕРВЕРА ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 SERVER_IP = "91.211.118.90"
@@ -90,8 +93,7 @@ def get_cs_players(client, ip, port):
         return players_list
     except Exception:
         return []
-
-def get_cs_status_full():
+        def get_cs_status_full():
     """Збирає статус сервера у вигляді чистого тексту"""
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -114,21 +116,22 @@ def get_cs_status_full():
         current_map = decode_text(payload[:map_end])
         payload = payload[map_end + 1:]
         
-        # Пропуск папки та назви гри
+        # Пропуск папки та назви гри (ВИПРАВЛЕНО ВІДСТУПИ)
         for _ in range(2):
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
+            
         # Читання кількості гравців
         players_count = int(payload[2]) if len(payload) >= 3 else 0  # ПОВЕРНЕНО [2]
         max_players = int(payload[3]) if len(payload) >= 4 else 0   # ПОВЕРНЕНО [3]
             
         players = get_cs_players(client, SERVER_IP, SERVER_PORT)
         
-        text = f"⚙️ *Моніторинг {server_name}*\n\n"
-        text += f"🖥️ *{server_name}*\n"
-        text += f"🌐 *IP*: {SERVER_IP}:{SERVER_PORT}\n"
-        text += f"🗺️ *Карта*: {current_map}\n"
-        text += f"👥 *Гравці*: {players_count}/{max_players}\n\n"
+        text = f"⚙️ Моніторинг {server_name}\n\n"
+        text += f"🖥 {server_name}\n"
+        text += f"🌐 IP: {SERVER_IP}:{SERVER_PORT}\n"
+        text += f"🗺 Карта: {current_map}\n"
+        text += f"👥 Гравці: {players_count}/{max_players}\n\n"
         
         if players_count > 0 and players:
             for idx, p in enumerate(players, 1):
@@ -150,16 +153,13 @@ def get_cs_status_full():
         
     except socket.timeout:
         return {"status": "offline", "text": f"🔴 *Статус сервера*: OFFLINE ❌\n\nСервер {SERVER_IP}:{SERVER_PORT} зараз недоступний або вимкнений."}
-    except Exception as e:
+    except Exception:
         return {"status": "error", "text": "⚠️ *Помилка*: Не вдалося зв'язатися з ігровим сервером."}
 
 @bot.message_handler(commands=['info', 'server'])
 def send_cs_status(message):
     data = get_cs_status_full()
-    
     MAIN_BANNER_ID = "AgACAgIAAxkBAAOgak6BkYsMaEy0JS3SUaoIQmyWCoAAAv8caxvTMHBKqvUcUE0TuaIBAAMCAAN5AAM8BA"
-    
-    # Визначаємо ID гілки (топіка), де викликали команду
     thread_id = message.message_thread_id
     
     if data.get("status") == "online":
@@ -168,7 +168,6 @@ def send_cs_status(message):
                 chat_id=message.chat.id, 
                 photo=MAIN_BANNER_ID, 
                 caption=data["text"], 
-                parse_mode="Markdown",
                 message_thread_id=thread_id
             )
             return
@@ -178,27 +177,12 @@ def send_cs_status(message):
     bot.send_message(
         chat_id=message.chat.id, 
         text=data["text"], 
-        parse_mode="Markdown",
         message_thread_id=thread_id,
         reply_to_message_id=message.message_id
     )
 
+# ВИПРАВЛЕНО ТОЧКУ ВХОДУ СИНТАКСИЧНО
 if __name__ == "__main__":
     threading.Thread(target=run_web_server, daemon=True).start()
     print("Telegram bot started successfully...")
     bot.polling(none_stop=True)
-    @bot.message_handler(commands=['info', 'server'])
-def send_cs_status(message):
-    data = get_cs_status_full()
-    thread_id = message.message_thread_id
-    
-    # Убираем parse_mode вообще. Текст придет обычным, зато со 100% гарантией без ошибок
-    bot.send_message(
-        chat_id=message.chat.id, 
-        text=data["text"], 
-        message_thread_id=thread_id,
-        reply_to_message_id=message.message_id
-    )
-def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()
