@@ -199,3 +199,6 @@ def send_cs_status(message):
         message_thread_id=thread_id,
         reply_to_message_id=message.message_id
     )
+def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
