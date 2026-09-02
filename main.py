@@ -95,7 +95,7 @@ def get_cs_players(client, ip, port):
         return []
         def get_cs_status_full():
     """Збирає статус сервера у вигляді чистого тексту"""
-    try:
+        try:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.settimeout(2.5)
         
