@@ -118,7 +118,7 @@ def get_cs_status_full():
         for _ in range(2):
             end = payload.find(b'\x00')
             payload = payload[end + 1:]
-[10.07.2026 21:09] Trockenbau und Bodenlegen 75175 Pforzheim: # Читання кількості гравців
+        # Читання кількості гравців
         players_count = int(payload[2]) if len(payload) >= 3 else 0  # ПОВЕРНЕНО [2]
         max_players = int(payload[3]) if len(payload) >= 4 else 0   # ПОВЕРНЕНО [3]
             
